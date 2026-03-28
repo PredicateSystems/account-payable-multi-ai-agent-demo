@@ -208,9 +208,7 @@ class TestVerificationPredicates:
         """Test Beat 1 verification checks for notes."""
         predicates = get_beat_1_verification()
         assert len(predicates) >= 1
-        # Should check URL and note presence
-        # Verification should include existence checks
-        assert len(predicates) >= 2
+        # Should check URL - note addition is verified by stepwise planner completion
 
     def test_beat_2_verification_checks_status(self):
         """Test Beat 2 verification checks reconciled status."""

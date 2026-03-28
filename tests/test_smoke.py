@@ -77,12 +77,13 @@ def demo_authorizer():
 def mock_agent():
     """Create a mock PlannerExecutorAgent."""
     agent = MagicMock()
-    # Mock the run method to return a successful outcome
+    # Mock the run_stepwise method to return a successful outcome
+    # (workflow.py uses run_stepwise, not run)
     mock_outcome = MagicMock()
     mock_outcome.fallback_used = False
     mock_outcome.error = None
     mock_outcome.total_duration_ms = 1000
-    agent.run = AsyncMock(return_value=mock_outcome)
+    agent.run_stepwise = AsyncMock(return_value=mock_outcome)
     return agent
 
 
