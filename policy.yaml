@@ -1,40 +1,148 @@
+# Account Payable Demo Policy
+#
+# This policy defines authorization boundaries for the finance demo.
+# Key story points:
+#   - Beat 3 (Release Payment) is DENIED - risky action blocked by policy
+#   - Beat 4 (Route To Review) is ALLOWED - safe fallback succeeds
+#   - Beat 1 & 2 browser actions are ALLOWED for navigation and interaction
+#
+# Policy evaluation order:
+#   1. DENY rules are evaluated first (fail-fast)
+#   2. ALLOW rules match principals, actions, resources
+#   3. Default: DENY (unless explicitly allowed)
+
 rules:
+  # ============================================================================
+  # DENY RULES (evaluated first)
+  # ============================================================================
+
+  # Beat 3: Deny high-value payment release - THE KEY DEMO MOMENT
+  # This rule blocks the risky action in the demo, demonstrating policy boundaries
+  - name: deny-payment-release
+    effect: deny
+    principals:
+      - "agent:*"
+    actions:
+      - "payment.release"
+    resources:
+      - "*"
+
+  # Also deny browser clicks on release payment URLs
+  - name: deny-release-payment-click
+    effect: deny
+    principals:
+      - "agent:*"
+    actions:
+      - "browser.click"
+    resources:
+      - "https://www.localllamaland.com/demo/finance/*/release"
+      - "https://www.localllamaland.com/demo/finance/invoices/*/release"
+      - "http://localhost:3000/demo/finance/*/release"
+      - "http://localhost:3000/demo/finance/invoices/*/release"
+
+  # Deny arbitrary shell execution (security baseline)
   - name: deny-arbitrary-shell
     effect: deny
-    principals: ["agent:*"]
-    actions: ["cli.exec"]
-    resources: ["*"]
+    principals:
+      - "agent:*"
+    actions:
+      - "cli.exec"
+    resources:
+      - "*"
 
+  # Deny external egress to untrusted domains
   - name: deny-external-egress
     effect: deny
-    principals: ["agent:*"]
-    actions: ["http.fetch"]
+    principals:
+      - "agent:*"
+    actions:
+      - "http.fetch"
     resources:
       - "http://*"
       - "https://evil-*"
       - "https://*.ngrok.io/*"
 
+  # ============================================================================
+  # ALLOW RULES (evaluated after deny rules)
+  # ============================================================================
+
+  # Beat 1, 2, 4: Allow navigation to finance demo pages
   - name: allow-finance-demo-navigation
     effect: allow
-    principals: ["agent:invoice-intake", "agent:reconciliation", "agent:resolution", "agent:orchestrator"]
-    actions: ["browser.navigate", "browser.read"]
+    principals:
+      - "agent:invoice-intake"
+      - "agent:reconciliation"
+      - "agent:resolution"
+      - "agent:orchestrator"
+    actions:
+      - "browser.navigate"
+      - "browser.read"
     resources:
       - "https://www.localllamaland.com/demo/finance/*"
       - "http://localhost:3000/demo/finance/*"
 
-  - name: allow-finance-demo-note-and-review
+  # Beat 1: Allow adding notes to invoices
+  - name: allow-add-note
     effect: allow
-    principals: ["agent:resolution"]
-    actions: ["browser.click", "browser.type", "browser.submit"]
+    principals:
+      - "agent:invoice-intake"
+      - "agent:resolution"
+      - "agent:reconciliation"
+    actions:
+      - "invoice.add_note"
+      - "browser.click"
+      - "browser.type"
+      - "browser.submit"
     resources:
-      - "https://www.localllamaland.com/demo/finance/*"
-      - "http://localhost:3000/demo/finance/*"
+      - "https://www.localllamaland.com/demo/finance/invoices/*/notes"
+      - "https://www.localllamaland.com/demo/finance/invoices/*"
+      - "http://localhost:3000/demo/finance/invoices/*/notes"
+      - "http://localhost:3000/demo/finance/invoices/*"
 
-  - name: deny-high-value-release
-    effect: deny
-    principals: ["agent:*"]
-    actions: ["payment.release", "browser.click"]
+  # Beat 2: Allow marking invoices as reconciled (action itself allowed,
+  # but the UI won't actually change - demonstrating silent failure)
+  - name: allow-mark-reconciled
+    effect: allow
+    principals:
+      - "agent:reconciliation"
+      - "agent:resolution"
+    actions:
+      - "invoice.mark_reconciled"
+      - "browser.click"
     resources:
-      - "finance://release-payment/high-value"
-      - "https://www.localllamaland.com/demo/finance/*/release"
-      - "http://localhost:3000/demo/finance/*/release"
+      - "https://www.localllamaland.com/demo/finance/invoices/*/reconcile"
+      - "https://www.localllamaland.com/demo/finance/invoices/*"
+      - "http://localhost:3000/demo/finance/invoices/*/reconcile"
+      - "http://localhost:3000/demo/finance/invoices/*"
+
+  # Beat 4: Allow routing to review - THE SAFE FALLBACK
+  - name: allow-route-to-review
+    effect: allow
+    principals:
+      - "agent:resolution"
+      - "agent:reconciliation"
+    actions:
+      - "invoice.route_to_review"
+      - "browser.click"
+      - "browser.submit"
+    resources:
+      - "https://www.localllamaland.com/demo/finance/invoices/*/review"
+      - "https://www.localllamaland.com/demo/finance/invoices/*"
+      - "http://localhost:3000/demo/finance/invoices/*/review"
+      - "http://localhost:3000/demo/finance/invoices/*"
+
+  # General browser interactions on invoice pages (for form filling)
+  - name: allow-invoice-page-interactions
+    effect: allow
+    principals:
+      - "agent:resolution"
+      - "agent:reconciliation"
+    actions:
+      - "browser.click"
+      - "browser.type"
+      - "browser.submit"
+    resources:
+      - "https://www.localllamaland.com/demo/finance/queue"
+      - "https://www.localllamaland.com/demo/finance/queue/*"
+      - "http://localhost:3000/demo/finance/queue"
+      - "http://localhost:3000/demo/finance/queue/*"

@@ -5,6 +5,12 @@ description = "Predicate Systems Account Payable Demo - finance workflow demo"
 requires-python = ">=3.10"
 dependencies = [
     "python-dotenv>=1.0.0",
+    "playwright>=1.40.0",
+    "predicate-runtime",
+    "predicate-authority",
+    "predicate-contracts",
+    "openai>=1.0.0",
+    "anthropic>=0.18.0",
 ]
 
 [project.optional-dependencies]
