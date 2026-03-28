@@ -125,82 +125,50 @@ require_cmd() {
   fi
 }
 
+# Use Python module for health check
 health_check() {
   local url="$1"
-  curl -sf "${url}/health" >/dev/null 2>&1
-}
-
-detect_os() {
-  case "$(uname -s)" in
-    Darwin) echo "darwin" ;;
-    Linux) echo "linux" ;;
-    *) echo "unsupported" ;;
-  esac
-}
-
-detect_arch() {
-  case "$(uname -m)" in
-    arm64|aarch64) echo "arm64" ;;
-    x86_64|amd64) echo "x86_64" ;;
-    *) echo "unsupported" ;;
-  esac
-}
-
-resolve_sidecar_download_url() {
-  local repo="${SIDECAR_RELEASE_REPO:-PredicateSystems/predicate-authority-sidecar}"
-  local version="${SIDECAR_VERSION:-latest}"
-  local os arch api_url
-  os="$(detect_os)"
-  arch="$(detect_arch)"
-
-  if [[ "$os" = "unsupported" || "$arch" = "unsupported" ]]; then
-    return 1
-  fi
-
-  if [[ "$version" = "latest" ]]; then
-    api_url="https://api.github.com/repos/${repo}/releases/latest"
-  else
-    api_url="https://api.github.com/repos/${repo}/releases/tags/${version}"
-  fi
-
-  curl -fsSL "$api_url" | python3 - "$os" "$arch" <<'PY'
-import json
+  python3 -c "
+from account_payable_demo.sidecar import health_check
 import sys
-
-os_name = sys.argv[1]
-arch = sys.argv[2]
-data = json.load(sys.stdin)
-
-assets = data.get("assets", [])
-needles = [
-    "predicate",
-    "authority",
-    os_name,
-    arch,
-]
-
-def score(name: str) -> int:
-    lower = name.lower()
-    return sum(1 for n in needles if n in lower)
-
-best = None
-best_score = -1
-for asset in assets:
-    name = asset.get("name", "")
-    s = score(name)
-    if s > best_score:
-        best = asset.get("browser_download_url")
-        best_score = s
-
-if not best:
-    sys.exit(1)
-
-print(best)
-PY
+sys.exit(0 if health_check('$url') else 1)
+" 2>/dev/null
 }
 
+# Use Python module for platform detection
+detect_platform() {
+  python3 -c "
+from account_payable_demo.sidecar import detect_platform
+plat = detect_platform()
+if plat:
+    print(f'{plat.os.value}-{plat.arch.value}')
+else:
+    print('unsupported')
+" 2>/dev/null || echo "unsupported"
+}
+
+# Use Python module to resolve sidecar download URL
+resolve_sidecar_download_url() {
+  python3 -c "
+from account_payable_demo.sidecar import resolve_download_url
+import sys
+url = resolve_download_url()
+if url:
+    print(url)
+    sys.exit(0)
+else:
+    sys.exit(1)
+" 2>/dev/null
+}
+
+# Use Python module for download with fallback to shell
 download_sidecar() {
   if [ -x "$SIDECAR_BIN" ]; then
+    return 0
+  fi
+
+  if [ "$DRY_RUN" = "true" ]; then
+    say "${YELLOW}[dry-run] Would download sidecar binary to ${SIDECAR_BIN}${NC}"
     return 0
   fi
 
@@ -209,13 +177,50 @@ download_sidecar() {
     return 1
   fi
 
-  require_cmd curl
   require_cmd python3
 
-  say "${CYAN}Resolving sidecar release asset...${NC}"
+  say "${CYAN}Attempting sidecar download via Python module...${NC}"
+
+  # Try Python-based download first
+  local result
+  result=$(python3 -c "
+from account_payable_demo.sidecar import download_sidecar
+from account_payable_demo.config import SidecarConfig
+from pathlib import Path
+import json
+
+config = SidecarConfig()
+bin_dir = Path('$BIN_DIR')
+tmp_dir = Path('$TMP_DIR')
+
+result = download_sidecar(config, bin_dir, tmp_dir)
+print(json.dumps({
+    'success': result.success,
+    'binary_path': str(result.binary_path) if result.binary_path else None,
+    'error': result.error
+}))
+" 2>/dev/null) || result='{"success": false, "error": "Python module failed"}'
+
+  local success
+  success=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('success', False))")
+
+  if [ "$success" = "True" ]; then
+    say "${GREEN}Sidecar downloaded successfully${NC}"
+    return 0
+  fi
+
+  local error
+  error=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('error', 'Unknown error'))")
+  say "${YELLOW}Python download failed: ${error}${NC}"
+
+  # Fallback to shell-based download
+  say "${CYAN}Falling back to shell-based download...${NC}"
+  require_cmd curl
+
   local url
   if ! url="$(resolve_sidecar_download_url)"; then
     say "${YELLOW}Could not resolve a matching sidecar release asset automatically.${NC}"
+    print_manual_instructions
     return 1
   fi
 
@@ -228,11 +233,7 @@ download_sidecar() {
       run_cmd tar -xzf "$archive" -C "$TMP_DIR"
       ;;
     *.zip)
-      run_cmd python3 - "$archive" "$TMP_DIR" <<'PY'
-import sys
-import zipfile
-zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])
-PY
+      run_cmd python3 -c "import zipfile; zipfile.ZipFile('$archive').extractall('$TMP_DIR')"
       ;;
     *)
       run_cmd mv "$archive" "$SIDECAR_BIN"
@@ -241,18 +242,16 @@ PY
       ;;
   esac
 
+  # Find binary in extracted archive
   local found
-  found="$(python3 - "$TMP_DIR" <<'PY'
+  found="$(python3 -c "
+from account_payable_demo.sidecar import find_binary_in_dir
 from pathlib import Path
-import sys
+result = find_binary_in_dir(Path('$TMP_DIR'))
+if result:
+    print(result)
+" 2>/dev/null)"
 
-root = Path(sys.argv[1])
-for path in root.rglob("*"):
-    if path.is_file() and "predicate-authorityd" in path.name:
-        print(path)
-        break
-PY
-)"
   if [ -z "$found" ] || [ ! -f "$found" ]; then
     say "${YELLOW}Downloaded release asset did not contain a detectable sidecar binary.${NC}"
     return 1
@@ -260,6 +259,19 @@ PY
 
   run_cmd cp "$found" "$SIDECAR_BIN"
   run_cmd chmod +x "$SIDECAR_BIN"
+}
+
+print_manual_instructions() {
+  python3 -c "
+from account_payable_demo.sidecar import get_manual_install_instructions
+print(get_manual_install_instructions())
+" 2>/dev/null || cat <<EOF
+Manual fallback:
+  1. Download the correct predicate-authorityd release for your OS
+     from: https://github.com/PredicateSystems/predicate-authority-sidecar/releases/latest
+  2. Extract and place 'predicate-authorityd' in .bin/ directory
+  3. Run: predicate-authorityd --policy-file ./policy.yaml
+EOF
 }
 
 cleanup_sidecar() {
@@ -291,9 +303,7 @@ start_sidecar_if_needed() {
 
   if ! download_sidecar; then
     say "${YELLOW}Automatic sidecar bootstrap failed.${NC}"
-    say "${YELLOW}Manual fallback:${NC}"
-    say "  1. Download the correct predicate-authorityd release for your OS"
-    say "  2. Run it with: predicate-authorityd --policy-file ${policy_path}"
+    print_manual_instructions
     return 1
   fi
 
@@ -307,13 +317,16 @@ start_sidecar_if_needed() {
   echo $! > "$PID_FILE"
   STARTED_SIDECAR="true"
 
-  for _ in $(seq 1 30); do
-    if health_check "$sidecar_url"; then
-      say "${GREEN}Sidecar is healthy at ${sidecar_url}${NC}"
-      return 0
-    fi
-    sleep 1
-  done
+  # Use Python for waiting with health checks
+  say "${CYAN}Waiting for sidecar to become healthy...${NC}"
+  if python3 -c "
+from account_payable_demo.sidecar import wait_for_healthy
+import sys
+sys.exit(0 if wait_for_healthy('$sidecar_url', max_attempts=30) else 1)
+" 2>/dev/null; then
+    say "${GREEN}Sidecar is healthy at ${sidecar_url}${NC}"
+    return 0
+  fi
 
   say "${RED}Sidecar failed to become healthy. Check logs/sidecar.log${NC}"
   return 1
@@ -402,11 +415,23 @@ down_mode() {
   fi
 }
 
+# Print detected platform info
+print_platform_info() {
+  local platform_info
+  platform_info=$(detect_platform)
+  if [ "$platform_info" != "unsupported" ]; then
+    say "Platform:  ${platform_info}"
+  else
+    say "Platform:  ${YELLOW}unsupported (manual sidecar install required)${NC}"
+  fi
+}
+
 say "${CYAN}${BOLD}====================================================================${NC}"
 say "${CYAN}${BOLD} Account Payable Demo Launcher${NC}"
 say "${CYAN}${BOLD}====================================================================${NC}"
 say "Mode:      ${MODE}"
 say "LLM mode:  ${LLM_MODE}"
+print_platform_info
 say "Action:    ${ACTION}"
 say ""
 
