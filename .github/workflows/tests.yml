@@ -46,7 +46,9 @@ jobs:
         run: |
           python -m pytest tests/ -v --tb=short
 
-      - name: Validate config loading
+      - name: Validate config loading (local mode - no API keys required)
+        env:
+          LLM_MODE: local
         run: |
           python main.py --validate
 
@@ -68,6 +70,8 @@ jobs:
           pip install -e .
 
       - name: Test dry-run mode (no side effects)
+        env:
+          LLM_MODE: local
         run: |
           # Run in dry-run mode and verify no downloads occur
           ./run-demo.sh --local --dry-run
