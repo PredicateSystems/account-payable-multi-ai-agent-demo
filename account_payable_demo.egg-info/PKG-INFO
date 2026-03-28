@@ -4,6 +4,14 @@ Version: 0.1.0
 Summary: Predicate Systems Account Payable Demo - finance workflow demo
 Requires-Python: >=3.10
 Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: playwright>=1.40.0
+Requires-Dist: predicate-runtime
+Requires-Dist: predicate-authority
+Requires-Dist: predicate-contracts
+Requires-Dist: openai>=1.0.0
+Requires-Dist: anthropic>=0.18.0
 Provides-Extra: dev
 Requires-Dist: pytest>=8.0.0; extra == "dev"
 Requires-Dist: pytest-cov>=4.0.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23.0; extra == "dev"
+Requires-Dist: ruff>=0.3.0; extra == "dev"

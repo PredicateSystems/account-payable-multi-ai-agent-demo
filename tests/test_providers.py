@@ -13,7 +13,6 @@ from account_payable_demo.config import (
 from account_payable_demo.providers import (
     AnthropicProvider,
     DeepInfraProvider,
-    LLMProvider,
     OllamaProvider,
     OpenAIProvider,
     ProviderType,

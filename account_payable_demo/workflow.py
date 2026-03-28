@@ -16,35 +16,30 @@ The key demo moments:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 # SDK imports from predicate-runtime
 from predicate import (
     AgentRuntime,
-    AsyncPredicateBrowser,
-    OpenAIProvider,
     AnthropicProvider,
+    AsyncPredicateBrowser,
     DeepInfraProvider,
-    LLMProvider,
-    Tracer,
     JsonlTraceSink,
-    create_tracer,
+    LLMProvider,
+    OpenAIProvider,
     # Verification predicates
     Predicate,
-    url_contains,
-    exists,
-    not_exists,
-    element_count,
-    all_of,
+    Tracer,
     any_of,
+    create_tracer,
+    exists,
+    url_contains,
 )
-from predicate.models import SnapshotOptions
 from predicate.agents import (
     AutomationTask,
     PlannerExecutorAgent,
@@ -53,18 +48,16 @@ from predicate.agents import (
     TaskCategory,
 )
 from predicate.backends.playwright_backend import PlaywrightBackend
+from predicate.models import SnapshotOptions
 
-from account_payable_demo.config import DemoConfig
 from account_payable_demo.authorization import (
     ActionAuthorizer,
     AuthorizationResult,
     DemoAction,
-    DemoPrincipal,
     create_demo_authorizer,
-    create_runtime_authorizer,
-    format_denial_message,
     get_principal_for_beat,
 )
+from account_payable_demo.config import DemoConfig
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +161,7 @@ def create_sdk_provider(config: DemoConfig, role: str) -> LLMProvider:
 # Verification Predicates (Hard Outcomes)
 # ---------------------------------------------------------------------------
 
+
 def get_beat_1_verification() -> list[Predicate]:
     """
     Beat 1: Open invoice, compare fields, add note.
@@ -225,6 +219,7 @@ def get_beat_4_verification() -> list[Predicate]:
 # ---------------------------------------------------------------------------
 # Task Definitions (Soft Plans - LLM generates the steps)
 # ---------------------------------------------------------------------------
+
 
 def get_beat_1_task() -> AutomationTask:
     """
@@ -582,9 +577,9 @@ async def run_demo_workflow(
 
         # Execute each beat
         for beat, task, verification in beats:
-            logger.info(f"\n{'='*60}")
+            logger.info(f"\n{'=' * 60}")
             logger.info(f"Starting {beat.value}")
-            logger.info(f"{'='*60}")
+            logger.info(f"{'=' * 60}")
 
             beat_result = await execute_beat(
                 agent=agent,
@@ -603,7 +598,9 @@ async def run_demo_workflow(
                 logger.info(f"  Expected: {beat_result.success}")
             elif beat_result.outcome:
                 logger.info(f"Beat {beat.value} completed")
-                logger.info(f"  Verification: {'PASS' if beat_result.details.get('verification_passed') else 'FAIL'}")
+                logger.info(
+                    f"  Verification: {'PASS' if beat_result.details.get('verification_passed') else 'FAIL'}"
+                )
                 logger.info(f"  Expected success: {beat_result.success}")
             if beat_result.error:
                 logger.error(f"Beat {beat.value} error: {beat_result.error}")
@@ -643,15 +640,17 @@ def print_workflow_result(result: WorkflowResult) -> None:
 
         # Show authorization result if present
         if beat_result.was_policy_blocked:
-            print(f"  POLICY BLOCKED: Yes")
+            print("  POLICY BLOCKED: Yes")
             print(f"  Violated Rule: {beat_result.authorization.violated_rule}")
             print(f"  Denial Reason: {beat_result.authorization.reason.value}")
         elif beat_result.authorization and beat_result.authorization.allowed:
-            print(f"  Authorization: ALLOWED")
+            print("  Authorization: ALLOWED")
 
         if beat_result.details:
             if "verification_passed" in beat_result.details:
-                print(f"  Verification passed: {beat_result.details.get('verification_passed', 'N/A')}")
+                print(
+                    f"  Verification passed: {beat_result.details.get('verification_passed', 'N/A')}"
+                )
             if "total_duration_ms" in beat_result.details:
                 print(f"  Duration: {beat_result.details.get('total_duration_ms', 'N/A')}ms")
         if beat_result.error:
@@ -659,7 +658,7 @@ def print_workflow_result(result: WorkflowResult) -> None:
 
     # Authorization summary
     if result.authorization_log:
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print(" Authorization Summary")
         print("=" * 70)
         print(f"Total authorization checks: {len(result.authorization_log)}")
@@ -672,7 +671,7 @@ def print_workflow_result(result: WorkflowResult) -> None:
                 print(f"  - {denial.action} on {denial.resource}")
                 print(f"    Rule: {denial.violated_rule}")
 
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"Total tokens used: {result.total_tokens}")
     if result.trace_file:
         print(f"Trace file: {result.trace_file}")
