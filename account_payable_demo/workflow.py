@@ -41,7 +41,7 @@ from predicate.backends.playwright_backend import PlaywrightBackend
 from predicate.llm_provider import AnthropicProvider, DeepInfraProvider, LLMProvider, OpenAIProvider
 from predicate.models import SnapshotOptions
 from predicate.tracing import JsonlTraceSink, Tracer
-from predicate.verification import Predicate, any_of, exists, url_contains
+from predicate.verification import Predicate, exists, url_contains
 
 from account_payable_demo.authorization import (
     ActionAuthorizer,

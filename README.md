@@ -40,6 +40,42 @@ Traditional browser automation requires large LLMs (70B+) to interpret raw HTML 
 
 The result: A 4B executor model achieves the same reliability as GPT-4 on structured browser tasks, at a fraction of the cost and latency.
 
+### Executor Architecture: Heuristics with LLM Fallback
+
+The demo uses a **heuristics-first** executor strategy for maximum speed:
+
+```
+Planner (LLM)  →  "click the Add Note button"
+      ↓
+Heuristics     →  text match "Add Note" → CLICK(41)  [~0ms]
+      ↓ (if no match)
+Executor (LLM) →  select from snapshot context        [~200-500ms]
+```
+
+**How it works:**
+
+1. **Planner decides intent**: The planner LLM (7-8B) analyzes the page and outputs what to do next: `{"action": "CLICK", "intent": "Add Note button"}`
+
+2. **Heuristics try first**: Domain heuristics (`FinanceHeuristics`) attempt pattern matching—if the intent text matches an element, return immediately with zero LLM cost
+
+3. **LLM fallback**: If heuristics fail (ambiguous intent, unfamiliar UI), the executor LLM (4B) selects the element from the compact snapshot context
+
+**Why this design:**
+
+| Approach | Latency | Token Cost | Generalization |
+|----------|---------|------------|----------------|
+| Heuristics only | ~0ms | $0 | Domain-specific |
+| **Heuristics + LLM fallback** | ~0-500ms | Low | Good (current) |
+| LLM only | ~200-500ms | Higher | Excellent |
+
+**For production use:**
+
+- **Known workflows** (finance, HR, procurement): Add domain heuristics for speed
+- **Unknown workflows**: Disable heuristics, let executor LLM handle all element selection
+- **Hybrid**: Start with LLM-only, add heuristics for frequently-used patterns
+
+The compact snapshot format makes pure LLM execution viable—a 4B model reliably maps `"Add Note button"` to `CLICK(41)` when given structured element context. Heuristics are an **optimization**, not a requirement.
+
 ---
 
 ## Purpose
