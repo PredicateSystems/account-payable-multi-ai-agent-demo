@@ -1,18 +1,28 @@
-"""Smoke tests for the Account Payable Demo.
+"""Workflow-logic smoke tests for the Account Payable Demo.
 
-These high-signal tests verify the three key demo paths:
-1. Normal visible-state success path (Beat 1 & 4)
-2. Silent verification failure detection (Beat 2)
-3. Denied risky action path (Beat 3)
+These are deterministic smoke tests that verify the workflow's decision logic,
+authorization boundaries, and success/failure branching for all demo paths.
+
+NOTE: These tests mock the browser and LLM to ensure stability and speed.
+They do NOT test actual visible-state changes in a real browser DOM.
+For live browser E2E tests, see the local-llama-land test suite.
+
+What these tests cover:
+1. Normal success path logic (Beat 1 & 4) - workflow branching when verification passes
+2. Silent failure detection logic (Beat 2) - workflow recognizes verification failure as demo success
+3. Denied action path logic (Beat 3) - pre-action authorization blocks execution
+
+What these tests do NOT cover (verification gaps):
+- Real DOM state changes or selector matching
+- Actual browser automation or page rendering
+- LLM response parsing or plan generation
+- Network latency, timeouts, or error recovery
 
 Design principles:
 - Deterministic tests that don't require a live browser
-- Focus on the authorization and verification logic
+- Focus on the authorization and verification control flow
 - Mock external dependencies (LLM, browser) to ensure stability
-- Cover the critical decision points in the workflow
-
-These tests provide confidence that the demo logic is correct without
-requiring full end-to-end browser automation.
+- Cover the critical decision points in the workflow logic
 """
 
 from __future__ import annotations
@@ -94,18 +104,18 @@ def mock_runtime():
 
 
 # ---------------------------------------------------------------------------
-# Smoke Test 1: Normal Visible-State Success Path
+# Smoke Test 1: Normal Success Path Logic
 # ---------------------------------------------------------------------------
 
 
-class TestNormalSuccessPath:
-    """Smoke tests for the normal workflow success path.
+class TestNormalSuccessPathLogic:
+    """Workflow-logic smoke tests for the normal success path.
 
-    This covers Beat 1 (Open and Note) and Beat 4 (Route to Review),
-    both of which should:
-    - Be authorized by policy
-    - Execute successfully
-    - Pass verification
+    Tests the workflow's decision logic when beats are authorized and
+    verification predicates pass. Uses mocked verification - does NOT
+    test actual DOM state changes.
+
+    Covers Beat 1 (Open and Note) and Beat 4 (Route to Review).
     """
 
     def test_beat_1_authorized_by_policy(self, demo_authorizer):
@@ -185,22 +195,19 @@ class TestNormalSuccessPath:
 
 
 # ---------------------------------------------------------------------------
-# Smoke Test 2: Silent Verification Failure Path
+# Smoke Test 2: Silent Failure Detection Logic
 # ---------------------------------------------------------------------------
 
 
-class TestSilentFailurePath:
-    """Smoke tests for the silent verification failure path.
+class TestSilentFailureDetectionLogic:
+    """Workflow-logic smoke tests for the silent failure detection path.
 
-    This covers Beat 2 (Mark Reconciled), which should:
-    - Be authorized by policy (the action itself is allowed)
-    - Execute the click (button appears to work)
-    - FAIL verification (state didn't actually change)
-    - Count as demo SUCCESS because we detected the silent failure
+    Tests the workflow's inverted success logic for Beat 2: the demo
+    succeeds when verification FAILS, proving we can detect "click
+    worked but state didn't change."
 
-    Key insight: The demo succeeds when verification fails, proving
-    that our verification predicates can detect when "click worked
-    but state didn't change."
+    Uses mocked verification - does NOT test actual DOM state detection.
+    Covers Beat 2 (Mark Reconciled).
     """
 
     def test_beat_2_authorized_by_policy(self, demo_authorizer):
@@ -285,21 +292,17 @@ class TestSilentFailurePath:
 
 
 # ---------------------------------------------------------------------------
-# Smoke Test 3: Denied Risky Action Path
+# Smoke Test 3: Denied Action Path Logic
 # ---------------------------------------------------------------------------
 
 
-class TestDeniedActionPath:
-    """Smoke tests for the denied risky action path.
+class TestDeniedActionPathLogic:
+    """Workflow-logic smoke tests for the denied risky action path.
 
-    This covers Beat 3 (Release Payment), which should:
-    - Be DENIED by policy before execution
-    - Never reach the browser (pre-action authorization)
-    - Return success=True (denial was expected)
-    - Include policy violation details
+    Tests the workflow's pre-action authorization blocking and the
+    inverted success logic: demo succeeds when policy blocks the action.
 
-    Key insight: The demo succeeds when policy blocks the action,
-    proving our authorization layer works.
+    Covers Beat 3 (Release Payment).
     """
 
     def test_beat_3_denied_by_policy(self, demo_authorizer):
