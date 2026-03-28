@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
+import logging
 import sys
 from pathlib import Path
 
-from account_payable_demo import DemoConfig, load_config
+from account_payable_demo import DemoConfig, load_config, print_workflow_result, run_demo_workflow
 from account_payable_demo.config import LLMMode, RunMode
 from account_payable_demo.providers import get_provider_for_role, validate_provider_config
 
@@ -59,6 +61,16 @@ Environment variables:
         "--debug",
         action="store_true",
         help="Enable debug mode",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run browser in headless mode",
+    )
+    parser.add_argument(
+        "--run-workflow",
+        action="store_true",
+        help="Run the demo workflow",
     )
     return parser.parse_args()
 
@@ -178,12 +190,41 @@ def main() -> int:
         print("\nConfiguration is valid.")
         return 0
 
-    # Placeholder for actual workflow execution
+    # Run workflow if requested
+    if args.run_workflow:
+        print("\n" + "=" * 70)
+        print(" Running Demo Workflow")
+        print("=" * 70)
+
+        # Configure logging
+        log_level = logging.DEBUG if config.debug else logging.INFO
+        logging.basicConfig(
+            level=log_level,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        )
+
+        # Override headless from CLI
+        headless = args.headless or config.headless
+
+        try:
+            result = asyncio.run(run_demo_workflow(config, headless=headless))
+            print_workflow_result(result)
+            return 0 if result.all_succeeded else 1
+        except KeyboardInterrupt:
+            print("\nWorkflow interrupted by user")
+            return 130
+        except Exception as e:
+            print(f"\nWorkflow failed with error: {e}")
+            if config.debug:
+                import traceback
+                traceback.print_exc()
+            return 1
+
+    # Show configuration only
     print("\n" + "=" * 70)
-    print(" Demo Workflow (not yet implemented)")
+    print(" Demo Ready")
     print("=" * 70)
-    print("This is the configuration and provider selection scaffold.")
-    print("Next step: implement the PlannerExecutorAgent workflow.")
+    print("Configuration validated. Run with --run-workflow to execute the demo.")
     print("=" * 70)
 
     return 0

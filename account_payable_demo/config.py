@@ -143,9 +143,14 @@ class DemoConfig:
     sidecar: SidecarConfig = field(default_factory=SidecarConfig)
     app: AppConfig = field(default_factory=AppConfig)
 
+    # Predicate cloud tracing
+    predicate_api_key: Optional[str] = field(default=None, repr=False)
+    predicate_api_url: Optional[str] = None
+
     # Runtime behavior
     headless: bool = False
     debug: bool = False
+    show_overlay: bool = True  # Show snapshot overlay in browser (default: True)
     trace_output_dir: Path = field(default_factory=lambda: Path("./traces"))
     artifact_output_dir: Path = field(default_factory=lambda: Path("./artifacts"))
 
@@ -174,8 +179,11 @@ class DemoConfig:
             cloud_llm=CloudLLMConfig.from_env(),
             sidecar=SidecarConfig.from_env(base_dir),
             app=AppConfig.from_env(),
+            predicate_api_key=os.getenv("PREDICATE_API_KEY"),
+            predicate_api_url=os.getenv("PREDICATE_API_URL"),
             headless=os.getenv("HEADLESS", "false").lower() == "true",
             debug=os.getenv("DEBUG", "false").lower() == "true",
+            show_overlay=os.getenv("SHOW_OVERLAY", "true").lower() == "true",
             trace_output_dir=trace_dir,
             artifact_output_dir=artifact_dir,
         )
@@ -218,6 +226,11 @@ class DemoConfig:
         if self.is_local_llm:
             return "ollama"
         return self.cloud_llm.executor_provider
+
+    @property
+    def has_predicate_api_key(self) -> bool:
+        """Check if Predicate API key is configured for cloud tracing."""
+        return self.predicate_api_key is not None and self.predicate_api_key.strip() != ""
 
 
 def load_config(
