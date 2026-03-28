@@ -71,7 +71,8 @@ jobs:
 
       - name: Test dry-run mode (no side effects)
         env:
-          LLM_MODE: local
+          # Use cloud mode to skip Ollama check (dry-run doesn't actually connect)
+          LLM_MODE: cloud
         run: |
           # Run in dry-run mode and verify no downloads occur
           ./run-demo.sh --local --dry-run
