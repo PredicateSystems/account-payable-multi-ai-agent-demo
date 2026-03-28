@@ -91,11 +91,15 @@ def mock_runtime():
     """Create a mock AgentRuntime with verification support."""
     runtime = MagicMock()
 
-    # Mock the context for predicate evaluation
+    # Mock the context for predicate evaluation (legacy, kept for compatibility)
     mock_ctx = MagicMock()
     mock_ctx.url = "https://www.localllamaland.com/demo/finance/queue"
     mock_ctx.page_content = ""
     runtime._ctx = MagicMock(return_value=mock_ctx)
+
+    # Mock assert_() method for predicate evaluation
+    # Default behavior: all predicates pass (True)
+    runtime.assert_ = MagicMock(return_value=True)
 
     return runtime
 
@@ -145,11 +149,8 @@ class TestNormalSuccessPathLogic:
         task = get_beat_1_task()
         verification = get_beat_1_verification()
 
-        # Mock verification to pass
-        for pred in verification:
-            mock_result = MagicMock()
-            mock_result.passed = True
-            pred.evaluate = MagicMock(return_value=mock_result)
+        # Mock runtime.assert_() to return True (verification passes)
+        mock_runtime.assert_ = MagicMock(return_value=True)
 
         result = await execute_beat(
             agent=mock_agent,
@@ -171,11 +172,8 @@ class TestNormalSuccessPathLogic:
         task = get_beat_4_task()
         verification = get_beat_4_verification()
 
-        # Mock verification to pass
-        for pred in verification:
-            mock_result = MagicMock()
-            mock_result.passed = True
-            pred.evaluate = MagicMock(return_value=mock_result)
+        # Mock runtime.assert_() to return True (verification passes)
+        mock_runtime.assert_ = MagicMock(return_value=True)
 
         result = await execute_beat(
             agent=mock_agent,
@@ -234,11 +232,8 @@ class TestSilentFailureDetectionLogic:
         task = get_beat_2_task()
         verification = get_beat_2_verification()
 
-        # Mock verification to FAIL (state didn't change - silent failure)
-        for pred in verification:
-            mock_result = MagicMock()
-            mock_result.passed = False  # This is the key - verification fails
-            pred.evaluate = MagicMock(return_value=mock_result)
+        # Mock runtime.assert_() to return False (verification fails - state didn't change)
+        mock_runtime.assert_ = MagicMock(return_value=False)
 
         result = await execute_beat(
             agent=mock_agent,
@@ -266,11 +261,8 @@ class TestSilentFailureDetectionLogic:
         task = get_beat_2_task()
         verification = get_beat_2_verification()
 
-        # Mock verification to PASS (state changed - unexpected!)
-        for pred in verification:
-            mock_result = MagicMock()
-            mock_result.passed = True
-            pred.evaluate = MagicMock(return_value=mock_result)
+        # Mock runtime.assert_() to return True (verification passes - state changed unexpectedly!)
+        mock_runtime.assert_ = MagicMock(return_value=True)
 
         result = await execute_beat(
             agent=mock_agent,
