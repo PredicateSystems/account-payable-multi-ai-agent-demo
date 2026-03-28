@@ -192,3 +192,79 @@ print_workflow_result(result)
 |-----------|-----------|-------------|
 | `all_of` | `*predicates` | All predicates must pass |
 | `any_of` | `*predicates` | At least one predicate must pass |
+
+## Authorization Architecture
+
+The demo implements two authorization layers:
+
+### Beat-Level Authorization (Currently Active)
+
+Before each beat executes, `authorize_beat_action()` checks if the action is allowed:
+
+```python
+auth_result = authorizer.authorize_beat_action(
+    beat_name=beat.value,
+    action=action,
+    principal=beat_principal,
+)
+if auth_result.denied:
+    # Block execution before it starts
+    return BeatResult(success=True, authorization=auth_result, ...)
+```
+
+This is the **active enforcement point** for policy decisions.
+
+### Runtime-Level Authorization (Available, Not Wired)
+
+The `RuntimeAuthorizerCallback` class provides per-action authorization for `RuntimeAgent`:
+
+```python
+authorizer = create_demo_authorizer()
+callback = create_runtime_authorizer(authorizer)
+runtime = RuntimeAgent(
+    runtime=agent_runtime,
+    executor=executor,
+    pre_action_authorizer=callback,  # Per-action gate
+)
+```
+
+**Current limitation**: `PlannerExecutorAgent` doesn't expose `pre_action_authorizer`.
+Runtime-level authorization requires either:
+- SDK modification to add the parameter to `PlannerExecutorAgent`
+- Switching to `RuntimeAgent` (larger refactor)
+
+The `RuntimeAuthorizerCallback` is tested and ready for integration when SDK support is added.
+
+## Testing Coverage and Gaps
+
+### What's Tested
+
+| Component | Test Coverage | Notes |
+|-----------|---------------|-------|
+| Authorization logic | Unit tests | `test_authorization.py` covers policy evaluation |
+| Beat-level auth | Unit tests | Policy denials, allows, explicit deny rules |
+| Runtime authorizer callback | Unit tests | `RuntimeAuthorizerCallback` tested in isolation |
+| Workflow decision logic | Smoke tests | Success/failure branching with mocked browser/LLM |
+| Provider creation | Unit tests | All provider types and configurations |
+| Config loading | Unit tests | Environment variable parsing, defaults |
+
+### What's NOT Tested (Verification Gaps)
+
+| Gap | Description | Why |
+|-----|-------------|-----|
+| Full browser E2E | No tests use real browser + real DOM | Requires live site (localllamaland.com) |
+| Visible-state predicates | Predicates tested with mocks, not live DOM | Snapshot selectors need real page |
+| LLM response parsing | Mock LLM returns predetermined responses | Avoid non-determinism |
+| Network errors/timeouts | Happy path only | Would require fault injection |
+| Runtime-level auth integration | `RuntimeAuthorizerCallback` not wired to workflow | SDK limitation (see above) |
+
+### Smoke Test Scope
+
+The smoke tests in `tests/test_smoke.py` verify **workflow logic**, not visible state:
+
+- **Normal success path logic** - workflow branches correctly when verification passes
+- **Silent failure detection logic** - workflow recognizes verification failure as demo success
+- **Denied action path logic** - pre-action authorization blocks execution
+
+These tests mock the browser and LLM to ensure stability and speed. For live browser E2E tests,
+use the separate `local-llama-land` test suite with an actual browser and target site.
