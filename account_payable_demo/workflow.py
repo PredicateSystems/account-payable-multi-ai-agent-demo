@@ -751,7 +751,9 @@ async def run_demo_workflow(
                 parts = [p for p in el.href.split("/") if p]
                 href = parts[-1][:20] if parts else ""
 
-            lines.append(f"{el.id}|{role}|{text}|{importance}|{is_primary}|{doc_yq}|{ord_val}|{dg_flag}|{href}")
+            lines.append(
+                f"{el.id}|{role}|{text}|{importance}|{is_primary}|{doc_yq}|{ord_val}|{dg_flag}|{href}"
+            )
 
         header = "ID|role|text|imp|is_primary|docYq|ord|DG|href"
         return f"{header}\n" + "\n".join(lines) if lines else header
