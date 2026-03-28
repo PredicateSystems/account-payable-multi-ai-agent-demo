@@ -1,0 +1,40 @@
+rules:
+  - name: deny-arbitrary-shell
+    effect: deny
+    principals: ["agent:*"]
+    actions: ["cli.exec"]
+    resources: ["*"]
+
+  - name: deny-external-egress
+    effect: deny
+    principals: ["agent:*"]
+    actions: ["http.fetch"]
+    resources:
+      - "http://*"
+      - "https://evil-*"
+      - "https://*.ngrok.io/*"
+
+  - name: allow-finance-demo-navigation
+    effect: allow
+    principals: ["agent:invoice-intake", "agent:reconciliation", "agent:resolution", "agent:orchestrator"]
+    actions: ["browser.navigate", "browser.read"]
+    resources:
+      - "https://www.localllamaland.com/demo/finance/*"
+      - "http://localhost:3000/demo/finance/*"
+
+  - name: allow-finance-demo-note-and-review
+    effect: allow
+    principals: ["agent:resolution"]
+    actions: ["browser.click", "browser.type", "browser.submit"]
+    resources:
+      - "https://www.localllamaland.com/demo/finance/*"
+      - "http://localhost:3000/demo/finance/*"
+
+  - name: deny-high-value-release
+    effect: deny
+    principals: ["agent:*"]
+    actions: ["payment.release", "browser.click"]
+    resources:
+      - "finance://release-payment/high-value"
+      - "https://www.localllamaland.com/demo/finance/*/release"
+      - "http://localhost:3000/demo/finance/*/release"

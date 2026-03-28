@@ -1,0 +1,20 @@
+services:
+  demo-runner:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      RUN_MODE: docker
+      LLM_MODE: ${LLM_MODE:-cloud}
+      APP_BASE_URL: ${APP_BASE_URL:-https://www.localllamaland.com}
+      FINANCE_QUEUE_URL: ${FINANCE_QUEUE_URL:-https://www.localllamaland.com/demo/finance/queue}
+      PREDICATE_SIDECAR_URL: ${PREDICATE_SIDECAR_URL:-http://host.docker.internal:8787}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      PLANNER_PROVIDER: ${PLANNER_PROVIDER:-openai}
+      PLANNER_MODEL: ${PLANNER_MODEL:-gpt-4o}
+      EXECUTOR_PROVIDER: ${EXECUTOR_PROVIDER:-openai}
+      EXECUTOR_MODEL: ${EXECUTOR_MODEL:-gpt-4o-mini}
+      OLLAMA_PLANNER_MODEL: ${OLLAMA_PLANNER_MODEL:-qwen2.5:7b-instruct}
+      OLLAMA_EXECUTOR_MODEL: ${OLLAMA_EXECUTOR_MODEL:-qwen2.5:4b-instruct}
+    command: ["python3", "main.py", "--mode", "docker", "--llm", "${LLM_MODE:-cloud}"]
