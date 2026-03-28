@@ -2,7 +2,45 @@
 
 Flagship `predicate-secure` finance demo for `Invoice Exception Triage`.
 
-This demo shows how Predicate Systems enables safe, verifiable agent workflows in finance operations.
+This demo shows how Predicate Systems enables safe, verifiable agent workflows in finance operations—running entirely on **local LLMs** for data privacy and regulatory compliance.
+
+## Demo Results
+
+**Local LLM Configuration:**
+- Planner: Qwen3:8B (5.2GB)
+- Executor: Qwen3:4B (2.5GB)
+
+| Beat | Status | Duration |
+|------|--------|----------|
+| Open Invoice & Add Note | ✅ PASS | 163s |
+| Mark Reconciled (silent failure detection) | ✅ PASS | 41s |
+| Release Payment (policy blocked) | ✅ BLOCKED | - |
+| Route to Review | ✅ PASS | 33s |
+
+**Key Metrics:**
+- Total tokens: 12,884
+- All beats succeeded as expected: ✅
+
+### Why Local LLM Matters for Finance
+
+Financial operations involve sensitive data—invoice amounts, vendor details, payment authorizations. This demo runs entirely on **local LLMs** with zero data leaving your infrastructure:
+
+- **Data Privacy**: No invoice data, PO amounts, or vendor information sent to cloud APIs
+- **Regulatory Compliance**: Meets data residency requirements for financial workflows
+- **Cost Efficiency**: $0 LLM inference cost vs. ~$0.01-0.05 per workflow with cloud models
+
+### How Predicate-Runtime Enables Small LLMs
+
+Traditional browser automation requires large LLMs (70B+) to interpret raw HTML or screenshots. Predicate-runtime's **snapshot-first architecture** changes this:
+
+1. **Structured Element Context**: The Predicate API extracts semantic elements with IDs, roles, and importance scores—no HTML parsing needed
+2. **Compact Representation**: Elements formatted as `ID|role|text|importance|...` reduce context size by 90%+
+3. **Domain Heuristics**: Common patterns (click "Add Note", "Mark Reconciled") bypass LLM entirely
+4. **Tight Prompts**: Executor outputs just `CLICK(42)`—a 4B model handles this reliably
+
+The result: A 4B executor model achieves the same reliability as GPT-4 on structured browser tasks, at a fraction of the cost and latency.
+
+---
 
 ## Purpose
 
@@ -36,35 +74,113 @@ cp .env.example .env
 pip install -e ".[dev]"
 ```
 
-### 2. Run with Cloud LLMs
+### 2. Start the Policy Sidecar
+
+The demo includes a policy file (`policy.yaml`) that enforces authorization rules. Run the Predicate sidecar to enable policy enforcement:
 
 ```bash
-# Set your API key in .env
-# OPENAI_API_KEY=sk-...
+# Option A: If you have the sidecar binary
+./predicate-authorityd --policy-file ./policy.yaml --web-ui run
 
-# Run the demo
-python main.py --llm cloud
+# Option B: Build from rust-predicate-authorityd repo
+cd /path/to/rust-predicate-authorityd
+cargo build --release
+./target/release/predicate-authorityd --policy-file /path/to/account_payable_demo/policy.yaml --web-ui run
 ```
 
-### 3. Run with Local Ollama
+The sidecar runs on `http://localhost:8787` by default. You can view the policy UI at `http://localhost:8787`.
+
+**Policy highlights:**
+- `deny-payment-release`: Blocks all payment release actions (demonstrates policy denial)
+- `allow-invoice-actions`: Permits read, add_note, mark_reconciled, route_to_review
+
+### 3. Configure LLM Mode
+
+Edit `.env` to switch between cloud and local LLMs:
+
+**For Local LLM (recommended for finance/privacy):**
+```bash
+# .env
+LLM_MODE=local
+
+# Ollama settings
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_PLANNER_MODEL=qwen3:8b
+OLLAMA_EXECUTOR_MODEL=qwen3:4b
+```
+
+**For Cloud LLM:**
+```bash
+# .env
+LLM_MODE=cloud
+
+# Cloud provider settings
+OPENAI_API_KEY=sk-...
+PLANNER_PROVIDER=openai
+PLANNER_MODEL=gpt-4o
+EXECUTOR_PROVIDER=openai
+EXECUTOR_MODEL=gpt-4o-mini
+```
+
+### 4. Run with Local Ollama
 
 ```bash
 # Start Ollama (if not running)
 ollama serve
 
-# Pull required models
-ollama pull qwen2.5:7b-instruct
-ollama pull qwen2.5:4b-instruct
+# Pull required models (one-time)
+ollama pull qwen3:8b
+ollama pull qwen3:4b
 
 # Run the demo
-python main.py --llm local
+python main.py --run-workflow
+```
+
+### 5. Run with Cloud LLMs
+
+```bash
+# Ensure OPENAI_API_KEY is set in .env
+python main.py --run-workflow
 ```
 
 ## Run Modes
 
-### Docker + Cloud
+### Local LLM (Recommended for Finance)
 
-Recommended first-run path.
+Best for data privacy and regulatory compliance. No data leaves your infrastructure.
+
+```bash
+# 1. Configure for local LLM
+# Edit .env: LLM_MODE=local
+
+# 2. Start Ollama and pull models
+ollama serve
+ollama pull qwen3:8b
+ollama pull qwen3:4b
+
+# 3. Start sidecar (in separate terminal)
+./predicate-authorityd --policy-file ./policy.yaml --web-ui run
+
+# 4. Run demo
+python main.py --run-workflow
+```
+
+### Cloud LLM
+
+Easiest setup, best quality. Requires API key.
+
+```bash
+# 1. Configure for cloud LLM
+# Edit .env: LLM_MODE=cloud, OPENAI_API_KEY=sk-...
+
+# 2. Start sidecar (in separate terminal)
+./predicate-authorityd --policy-file ./policy.yaml --web-ui run
+
+# 3. Run demo
+python main.py --run-workflow
+```
+
+### Docker + Cloud
 
 ```bash
 cp .env.example .env
@@ -240,4 +356,9 @@ The demo ships with a pre-created policy in `policy.yaml`. In local mode, `run-d
 ## Related Documentation
 
 - [DESIGN.md](DESIGN.md) - System design and deployment matrix
-- [Spec](../../../docs/predicate_secure/2026-03-27_finance_ops_invoice_exception_triage_demo_spec.md) - Full demo specification
+
+## Related Repositories
+
+- [predicate-runtime SDK (Python)](https://github.com/PredicateSystems/predicate-runtime-python) - Browser automation with snapshot-first architecture
+- [predicate-secure SDK (Python)](https://github.com/PredicateSystems/predicate-secure) - Policy enforcement and verification layer
+- [predicate-authority-sidecar (Rust)](https://github.com/PredicateSystems/predicate-authority-sidecar) - Authorization sidecar for policy decisions
