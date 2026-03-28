@@ -224,9 +224,9 @@ class ActionAuthorizer:
 
         # Generate state hash if not provided
         if state_hash is None:
-            state_hash = hashlib.sha256(
-                f"{action_str}:{resource}:{intent}".encode()
-            ).hexdigest()[:16]
+            state_hash = hashlib.sha256(f"{action_str}:{resource}:{intent}".encode()).hexdigest()[
+                :16
+            ]
 
         # Build verification signals from labels
         signals: tuple[VerificationSignal, ...] = ()
@@ -317,7 +317,9 @@ class ActionAuthorizer:
             intent = f"Access invoice {invoice_id}"
 
         principal_str = principal.value if isinstance(principal, DemoPrincipal) else principal
-        logger.info(f"[{beat_name}] Authorizing action: {action.value} as {principal_str} on {resource}")
+        logger.info(
+            f"[{beat_name}] Authorizing action: {action.value} as {principal_str} on {resource}"
+        )
 
         return self.authorize(
             action=action,
@@ -345,9 +347,7 @@ class ActionAuthorizer:
     def _log_authorization(self, result: AuthorizationResult) -> None:
         """Log an authorization decision."""
         if result.allowed:
-            logger.info(
-                f"AUTHORIZED: {result.action} on {result.resource}"
-            )
+            logger.info(f"AUTHORIZED: {result.action} on {result.resource}")
         else:
             logger.warning(
                 f"DENIED: {result.action} on {result.resource} "
@@ -468,8 +468,7 @@ class RuntimeAuthorizerCallback:
         # Handle denial
         if result.denied and self._fail_closed:
             raise RuntimeError(
-                f"pre_action_authority_denied: {result.reason.value} "
-                f"(rule: {result.violated_rule})"
+                f"pre_action_authority_denied: {result.reason.value} (rule: {result.violated_rule})"
             )
 
         # Return a decision-like object
@@ -478,9 +477,7 @@ class RuntimeAuthorizerCallback:
             reason=result.reason.value if result.reason else None,
         )
 
-    def _map_browser_action_to_demo_action(
-        self, action: str, resource: str
-    ) -> DemoAction | str:
+    def _map_browser_action_to_demo_action(self, action: str, resource: str) -> DemoAction | str:
         """Map a browser action to a demo-specific action based on context.
 
         Args:

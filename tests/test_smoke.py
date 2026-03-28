@@ -27,14 +27,13 @@ Design principles:
 
 from __future__ import annotations
 
-import pytest
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from predicate_contracts import AuthorizationReason
 
 from account_payable_demo.authorization import (
-    ActionAuthorizer,
     AuthorizationResult,
     DemoAction,
     DemoPrincipal,
@@ -42,13 +41,12 @@ from account_payable_demo.authorization import (
     create_runtime_authorizer,
     get_principal_for_beat,
 )
-from account_payable_demo.config import DemoConfig, LLMMode, CloudLLMConfig
+from account_payable_demo.config import DemoConfig
 from account_payable_demo.workflow import (
     BeatResult,
     DemoBeat,
     WorkflowResult,
     execute_beat,
-    get_beat_action,
     get_beat_1_task,
     get_beat_1_verification,
     get_beat_2_task,
@@ -57,9 +55,8 @@ from account_payable_demo.workflow import (
     get_beat_3_verification,
     get_beat_4_task,
     get_beat_4_verification,
+    get_beat_action,
 )
-from predicate_contracts import AuthorizationReason
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -286,8 +283,7 @@ class TestSilentFailureDetectionLogic:
 
         # Demo FAILS when verification PASSES (unexpected - state changed)
         assert result.success is False, (
-            "Beat 2 demo should fail when verification passes "
-            "(state changed unexpectedly)"
+            "Beat 2 demo should fail when verification passes (state changed unexpectedly)"
         )
 
 
@@ -318,9 +314,7 @@ class TestDeniedActionPathLogic:
         assert result.violated_rule == "deny-payment-release"
 
     @pytest.mark.asyncio
-    async def test_beat_3_blocked_before_execution(
-        self, demo_authorizer, mock_agent, mock_runtime
-    ):
+    async def test_beat_3_blocked_before_execution(self, demo_authorizer, mock_agent, mock_runtime):
         """Beat 3: Execution is blocked before reaching the browser.
 
         This is the KEY authorization test:
@@ -343,8 +337,7 @@ class TestDeniedActionPathLogic:
         assert result.beat == DemoBeat.RELEASE_PAYMENT
         # Demo SUCCEEDS when policy BLOCKS (we prevented risky action)
         assert result.success is True, (
-            "Beat 3 demo should succeed when policy blocks "
-            "(proving authorization works)"
+            "Beat 3 demo should succeed when policy blocks (proving authorization works)"
         )
         assert result.was_policy_blocked is True
         assert result.details.get("policy_blocked") is True

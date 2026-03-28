@@ -395,7 +395,9 @@ def extract_archive(archive: Path, dest_dir: Path) -> bool:
         return False
 
 
-def find_binary_in_dir(search_dir: Path, binary_name: str = "predicate-authorityd") -> Optional[Path]:
+def find_binary_in_dir(
+    search_dir: Path, binary_name: str = "predicate-authorityd"
+) -> Optional[Path]:
     """
     Find the sidecar binary in a directory tree.
 

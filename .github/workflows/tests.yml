@@ -1,0 +1,86 @@
+name: Account Payable Demo Tests
+
+on:
+  push:
+    branches: [main, sidecar_planner2]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Run linting (ruff)
+        run: |
+          ruff check .
+
+      - name: Run formatting check (ruff format)
+        run: |
+          ruff format --check .
+
+      - name: Run tests
+        run: |
+          python -m pytest tests/ -v --tb=short
+
+      - name: Validate config loading (local mode - no API keys required)
+        env:
+          LLM_MODE: local
+        run: |
+          python main.py --validate
+
+  dry-run:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Test dry-run mode (no side effects)
+        env:
+          # Use cloud mode to skip Ollama check (dry-run doesn't actually connect)
+          LLM_MODE: cloud
+        run: |
+          # Run in dry-run mode and verify no downloads occur
+          ./run-demo.sh --local --dry-run
+
+          # Verify .bin directory is empty (no sidecar downloaded)
+          if [ -d ".bin" ] && [ "$(ls -A .bin 2>/dev/null)" ]; then
+            echo "ERROR: .bin directory should be empty in dry-run mode"
+            ls -la .bin
+            exit 1
+          fi
+          echo "Dry-run test passed: no files downloaded"

@@ -105,8 +105,12 @@ def print_config(config: DemoConfig) -> None:
         print(f"  Executor model:  {config.ollama.executor_model}")
     else:
         print("LLM Provider: Cloud")
-        print(f"  Planner:         {config.cloud_llm.planner_provider} / {config.cloud_llm.planner_model}")
-        print(f"  Executor:        {config.cloud_llm.executor_provider} / {config.cloud_llm.executor_model}")
+        print(
+            f"  Planner:         {config.cloud_llm.planner_provider} / {config.cloud_llm.planner_model}"
+        )
+        print(
+            f"  Executor:        {config.cloud_llm.executor_provider} / {config.cloud_llm.executor_model}"
+        )
 
         # Show API key status (not the actual keys)
         planner_key = config.cloud_llm.get_api_key(config.cloud_llm.planner_provider)
@@ -132,14 +136,14 @@ def print_provider_details(config: DemoConfig) -> None:
     planner = get_provider_for_role(config, "planner")
     executor = get_provider_for_role(config, "executor")
 
-    print(f"Planner provider:")
+    print("Planner provider:")
     print(f"  Type:     {planner.provider_type.value}")
     print(f"  Model:    {planner.model}")
     print(f"  Is local: {planner.is_local}")
     if planner.base_url:
         print(f"  Base URL: {planner.base_url}")
 
-    print(f"\nExecutor provider:")
+    print("\nExecutor provider:")
     print(f"  Type:     {executor.provider_type.value}")
     print(f"  Model:    {executor.model}")
     print(f"  Is local: {executor.is_local}")
@@ -217,6 +221,7 @@ def main() -> int:
             print(f"\nWorkflow failed with error: {e}")
             if config.debug:
                 import traceback
+
                 traceback.print_exc()
             return 1
 

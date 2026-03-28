@@ -15,7 +15,6 @@ from account_payable_demo.sidecar import (
     LOCAL_BOOTSTRAP_SUPPORTED_OS,
     OS,
     Architecture,
-    DownloadResult,
     Platform,
     Release,
     ReleaseAsset,
@@ -454,7 +453,9 @@ class TestHealthCheck:
     def test_health_check_failure(self):
         from urllib.error import URLError
 
-        with patch("account_payable_demo.sidecar.urlopen", side_effect=URLError("Connection refused")):
+        with patch(
+            "account_payable_demo.sidecar.urlopen", side_effect=URLError("Connection refused")
+        ):
             assert health_check("http://localhost:8787") is False
 
     def test_health_check_timeout(self):

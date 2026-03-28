@@ -8,11 +8,13 @@ These tests follow the 'soft plans, hard predicates' design:
 
 from __future__ import annotations
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch, AsyncMock
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-from account_payable_demo.config import DemoConfig, LLMMode, CloudLLMConfig, OllamaConfig
+import pytest
+from predicate.agents import AutomationTask, TaskCategory
+
+from account_payable_demo.config import CloudLLMConfig, DemoConfig, LLMMode, OllamaConfig
 from account_payable_demo.workflow import (
     BeatResult,
     DemoBeat,
@@ -29,8 +31,6 @@ from account_payable_demo.workflow import (
     get_beat_4_task,
     get_beat_4_verification,
 )
-
-from predicate.agents import AutomationTask, TaskCategory
 
 
 class TestDemoBeat:
@@ -209,7 +209,6 @@ class TestVerificationPredicates:
         predicates = get_beat_1_verification()
         assert len(predicates) >= 1
         # Should check URL and note presence
-        predicate_types = [type(p).__name__ for p in predicates]
         # Verification should include existence checks
         assert len(predicates) >= 2
 
@@ -279,7 +278,7 @@ class TestCreateSdkProvider:
             mock_instance = MagicMock()
             mock_provider.return_value = mock_instance
 
-            provider = create_sdk_provider(config, "planner")
+            create_sdk_provider(config, "planner")
 
             mock_provider.assert_called_once_with(
                 model="claude-3-sonnet",
@@ -301,7 +300,7 @@ class TestCreateSdkProvider:
             mock_instance = MagicMock()
             mock_provider.return_value = mock_instance
 
-            provider = create_sdk_provider(config, "executor")
+            create_sdk_provider(config, "executor")
 
             mock_provider.assert_called_once_with(
                 model="qwen2.5:4b-instruct",
@@ -326,7 +325,7 @@ class TestCreateSdkProvider:
             mock_instance = MagicMock()
             mock_provider.return_value = mock_instance
 
-            provider = create_sdk_provider(config, "planner")
+            create_sdk_provider(config, "planner")
 
             mock_provider.assert_called_once_with(
                 model="meta-llama/Llama-2-70b-chat-hf",
@@ -378,10 +377,10 @@ class TestSDKIntegration:
 
     def test_tracer_instantiation(self):
         """Test that Tracer can be instantiated correctly."""
-        from predicate import Tracer, JsonlTraceSink
-        from pathlib import Path
         import tempfile
         import uuid
+
+        from predicate import JsonlTraceSink, Tracer
 
         with tempfile.TemporaryDirectory() as tmpdir:
             trace_file = Path(tmpdir) / "test-trace.jsonl"
@@ -403,11 +402,11 @@ class TestSDKIntegration:
 
     def test_planner_executor_agent_instantiation(self):
         """Test that PlannerExecutorAgent can be instantiated correctly."""
-        from predicate.agents import PlannerExecutorAgent, PlannerExecutorConfig
-        from predicate import Tracer, JsonlTraceSink
-        from pathlib import Path
         import tempfile
         import uuid
+
+        from predicate import JsonlTraceSink, Tracer
+        from predicate.agents import PlannerExecutorAgent, PlannerExecutorConfig
 
         with tempfile.TemporaryDirectory() as tmpdir:
             trace_file = Path(tmpdir) / "test-trace.jsonl"
@@ -433,7 +432,7 @@ class TestSDKIntegration:
 
     def test_automation_task_structure(self):
         """Test that AutomationTask matches SDK expectations."""
-        from predicate.agents import AutomationTask, TaskCategory
+        from predicate.agents import TaskCategory
 
         # This should not raise - verifies SDK API compatibility
         task = AutomationTask(
@@ -451,13 +450,12 @@ class TestSDKIntegration:
     def test_predicate_types_available(self):
         """Test that verification predicate types are available."""
         from predicate import (
-            Predicate,
-            url_contains,
-            exists,
-            not_exists,
-            element_count,
             all_of,
             any_of,
+            element_count,
+            exists,
+            not_exists,
+            url_contains,
         )
 
         # These should all be callable - verifies SDK exports

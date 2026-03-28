@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from predicate_contracts import AuthorizationReason
 
 from account_payable_demo.authorization import (
     ActionAuthorizer,
@@ -25,8 +26,6 @@ from account_payable_demo.authorization import (
     format_denial_message,
     get_principal_for_beat,
 )
-from predicate_contracts import AuthorizationReason
-
 
 # Minimal policy for testing
 TEST_POLICY = """
@@ -514,7 +513,11 @@ class TestRuntimeAuthorizer:
             action_spec = type(
                 "ActionSpec",
                 (),
-                {"action": "browser.click", "resource": "https://example.com/release", "intent": "Release payment"},
+                {
+                    "action": "browser.click",
+                    "resource": "https://example.com/release",
+                    "intent": "Release payment",
+                },
             )()
 
         result = callback(MockRequest())
@@ -529,7 +532,11 @@ class TestRuntimeAuthorizer:
             action_spec = type(
                 "ActionSpec",
                 (),
-                {"action": "browser.click", "resource": "https://example.com/release", "intent": "Release payment"},
+                {
+                    "action": "browser.click",
+                    "resource": "https://example.com/release",
+                    "intent": "Release payment",
+                },
             )()
 
         with pytest.raises(RuntimeError, match="pre_action_authority_denied"):
@@ -618,7 +625,11 @@ class TestRuntimeAuthorizationEnforcement:
             action_spec = type(
                 "ActionSpec",
                 (),
-                {"action": "browser.click", "resource": "https://example.com/test", "intent": "Test action"},
+                {
+                    "action": "browser.click",
+                    "resource": "https://example.com/test",
+                    "intent": "Test action",
+                },
             )()
 
         callback(TestRequest())

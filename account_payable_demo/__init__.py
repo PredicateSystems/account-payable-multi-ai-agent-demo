@@ -20,8 +20,8 @@ from account_payable_demo.providers import (
 )
 from account_payable_demo.sidecar import (
     LOCAL_BOOTSTRAP_SUPPORTED_OS,
-    Architecture,
     OS,
+    Architecture,
     Platform,
     detect_architecture,
     detect_os,
