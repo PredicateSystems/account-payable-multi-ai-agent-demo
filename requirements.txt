@@ -1,0 +1,15 @@
+# Account Payable Demo - Dependencies
+
+# Core dependencies
+python-dotenv>=1.0.0
+
+# Testing
+pytest>=8.0.0
+pytest-cov>=4.0.0
+
+# Type hints (for development)
+# mypy>=1.0.0
+
+# Note: The Predicate Python SDK should be installed separately
+# pip install predicate-sdk (when available)
+# or from local path during development

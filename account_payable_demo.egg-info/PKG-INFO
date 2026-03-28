@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: account-payable-demo
+Version: 0.1.0
+Summary: Predicate Systems Account Payable Demo - finance workflow demo
+Requires-Python: >=3.10
+Requires-Dist: python-dotenv>=1.0.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0.0; extra == "dev"
