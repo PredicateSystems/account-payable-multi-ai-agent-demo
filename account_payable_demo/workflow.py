@@ -46,7 +46,6 @@ from predicate.llm_provider import (
     OpenAIProvider,
 )
 from predicate.models import ScreenshotConfig, SnapshotOptions
-from predicate.tracing import JsonlTraceSink, Tracer
 from predicate.verification import Predicate, exists, url_contains
 
 from account_payable_demo.authorization import (
@@ -658,23 +657,24 @@ async def run_demo_workflow(
     planner = create_sdk_provider(config, "planner")
     executor = create_sdk_provider(config, "executor")
 
-    # Create tracer - use cloud tracing if PREDICATE_API_KEY is set
-    if config.has_predicate_api_key:
-        logger.info("Using Predicate cloud tracing")
-        tracer = create_tracer(
-            api_key=config.predicate_api_key,
-            run_id=run_id,
-            api_url=config.predicate_api_url,
-            goal="Account Payable Demo - Finance Workflow",
-            agent_type="planner-executor",
-            llm_model=config.get_planner_model(),
-            start_url=config.app.finance_queue_url,
-        )
-    else:
-        # Fall back to local file tracing
-        logger.info("Using local file tracing (set PREDICATE_API_KEY for cloud tracing)")
-        sink = JsonlTraceSink(trace_file)
-        tracer = Tracer(run_id=run_id, sink=sink)
+    # Create tracer using unified create_tracer() factory
+    # - With API key: uploads to Predicate Studio (cloud)
+    # - Without API key: saves to local JSONL file
+    # The tracer auto-closes on process exit (atexit) as safety net
+    logger.info(
+        "Using Predicate cloud tracing"
+        if config.has_predicate_api_key
+        else "Using local file tracing (set PREDICATE_API_KEY for cloud tracing)"
+    )
+    tracer = create_tracer(
+        api_key=config.predicate_api_key if config.has_predicate_api_key else None,
+        run_id=run_id,
+        api_url=config.predicate_api_url if config.has_predicate_api_key else None,
+        goal="Account Payable Demo - Finance Workflow",
+        agent_type="planner-executor",
+        llm_model=config.get_planner_model(),
+        start_url=config.app.finance_queue_url,
+    )
 
     # Create agent config with comprehensive settings
     # Mirrors the approach in sentience-sdk-playground/planner_executor_local2
@@ -801,77 +801,75 @@ async def run_demo_workflow(
     else:
         logger.info(f"Using local snapshots (show_overlay={config.show_overlay})")
 
-    # Use AsyncPredicateBrowser for better snapshot integration
-    async with AsyncPredicateBrowser(
-        api_key=config.predicate_api_key,
-        headless=headless,
-    ) as browser:
-        page = browser.page
+    # Use async context managers for automatic cleanup:
+    # - tracer: auto-closes and uploads trace data to Predicate Studio
+    # - browser: auto-closes Playwright browser
+    async with tracer:
+        async with AsyncPredicateBrowser(
+            api_key=config.predicate_api_key,
+            headless=headless,
+        ) as browser:
+            page = browser.page
 
-        # Navigate to starting URL
-        await page.goto(config.app.finance_queue_url)
-        await page.wait_for_load_state("domcontentloaded", timeout=15_000)
-        try:
-            await page.wait_for_load_state("networkidle", timeout=10_000)
-        except Exception:
-            pass  # Best effort
+            # Navigate to starting URL
+            await page.goto(config.app.finance_queue_url)
+            await page.wait_for_load_state("domcontentloaded", timeout=15_000)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=10_000)
+            except Exception:
+                pass  # Best effort
 
-        # Create runtime with PlaywrightBackend and API key
-        backend = PlaywrightBackend(page)
-        runtime = AgentRuntime(
-            backend=backend,
-            tracer=tracer,
-            predicate_api_key=config.predicate_api_key,
-            snapshot_options=snapshot_options,
-        )
-
-        # Execute each beat
-        for beat, task, verification in beats:
-            logger.info(f"\n{'=' * 60}")
-            logger.info(f"Starting {beat.value}")
-            logger.info(f"{'=' * 60}")
-
-            beat_result = await execute_beat(
-                agent=agent,
-                runtime=runtime,
-                beat=beat,
-                task=task,
-                verification=verification,
-                authorizer=authorizer,
+            # Create runtime with PlaywrightBackend and API key
+            backend = PlaywrightBackend(page)
+            runtime = AgentRuntime(
+                backend=backend,
+                tracer=tracer,
+                predicate_api_key=config.predicate_api_key,
+                snapshot_options=snapshot_options,
             )
-            result.beats.append(beat_result)
 
-            # Log beat result
-            if beat_result.was_policy_blocked:
-                logger.info(f"Beat {beat.value} was BLOCKED by policy")
-                logger.info(f"  Rule: {beat_result.authorization.violated_rule}")
-                logger.info(f"  Expected: {beat_result.success}")
-            elif beat_result.outcome:
-                logger.info(f"Beat {beat.value} completed")
-                logger.info(
-                    f"  Verification: {'PASS' if beat_result.details.get('verification_passed') else 'FAIL'}"
+            # Execute each beat
+            for beat, task, verification in beats:
+                logger.info(f"\n{'=' * 60}")
+                logger.info(f"Starting {beat.value}")
+                logger.info(f"{'=' * 60}")
+
+                beat_result = await execute_beat(
+                    agent=agent,
+                    runtime=runtime,
+                    beat=beat,
+                    task=task,
+                    verification=verification,
+                    authorizer=authorizer,
                 )
-                logger.info(f"  Expected success: {beat_result.success}")
-            if beat_result.error:
-                logger.error(f"Beat {beat.value} error: {beat_result.error}")
+                result.beats.append(beat_result)
 
-    # Collect authorization log
-    if authorizer is not None:
-        result.authorization_log = authorizer.get_authorization_log()
+                # Log beat result
+                if beat_result.was_policy_blocked:
+                    logger.info(f"Beat {beat.value} was BLOCKED by policy")
+                    logger.info(f"  Rule: {beat_result.authorization.violated_rule}")
+                    logger.info(f"  Expected: {beat_result.success}")
+                elif beat_result.outcome:
+                    logger.info(f"Beat {beat.value} completed")
+                    logger.info(
+                        f"  Verification: {'PASS' if beat_result.details.get('verification_passed') else 'FAIL'}"
+                    )
+                    logger.info(f"  Expected success: {beat_result.success}")
+                if beat_result.error:
+                    logger.error(f"Beat {beat.value} error: {beat_result.error}")
 
-    # Collect token usage
-    if result.beats and result.beats[0].outcome:
-        token_usage = result.beats[0].outcome.token_usage
-        if token_usage:
-            result.total_tokens = token_usage.get("total", {}).get("total_tokens", 0)
+        # Collect authorization log (after browser closes, before tracer closes)
+        if authorizer is not None:
+            result.authorization_log = authorizer.get_authorization_log()
 
-    # Close tracer to flush trace data to cloud (required for Studio visualization)
-    # This uploads screenshots and step data to Predicate Studio
-    try:
-        tracer.close()
-        logger.info("Tracer closed - trace data uploaded to Predicate Studio")
-    except Exception as e:
-        logger.warning(f"Failed to close tracer: {e}")
+        # Collect token usage
+        if result.beats and result.beats[0].outcome:
+            token_usage = result.beats[0].outcome.token_usage
+            if token_usage:
+                result.total_tokens = token_usage.get("total", {}).get("total_tokens", 0)
+
+    # tracer.close() called automatically by async context manager
+    logger.info("Tracer closed - trace data uploaded to Predicate Studio")
 
     return result
 
