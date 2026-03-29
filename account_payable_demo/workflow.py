@@ -45,7 +45,7 @@ from predicate.llm_provider import (
     OllamaProvider,
     OpenAIProvider,
 )
-from predicate.models import SnapshotOptions
+from predicate.models import ScreenshotConfig, SnapshotOptions
 from predicate.tracing import JsonlTraceSink, Tracer
 from predicate.verification import Predicate, exists, url_contains
 
@@ -784,10 +784,11 @@ async def run_demo_workflow(
     # Determine if we should use API features
     use_api = config.has_predicate_api_key
 
-    # Configure SnapshotOptions with show_overlay and API key
+    # Configure SnapshotOptions with show_overlay, API key, and screenshot config
+    # Using ScreenshotConfig for explicit format/quality settings (required for Studio)
     snapshot_options = SnapshotOptions(
         limit=60,
-        screenshot=True,
+        screenshot=ScreenshotConfig(format="jpeg", quality=80),
         show_overlay=config.show_overlay,
         goal="Account Payable Demo - Finance Workflow",
         use_api=True if use_api else None,
@@ -863,6 +864,14 @@ async def run_demo_workflow(
         token_usage = result.beats[0].outcome.token_usage
         if token_usage:
             result.total_tokens = token_usage.get("total", {}).get("total_tokens", 0)
+
+    # Close tracer to flush trace data to cloud (required for Studio visualization)
+    # This uploads screenshots and step data to Predicate Studio
+    try:
+        tracer.close()
+        logger.info("Tracer closed - trace data uploaded to Predicate Studio")
+    except Exception as e:
+        logger.warning(f"Failed to close tracer: {e}")
 
     return result
 
