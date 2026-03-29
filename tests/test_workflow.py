@@ -294,16 +294,16 @@ class TestCreateSdkProvider:
             ),
         )
 
-        with patch("account_payable_demo.workflow.OpenAIProvider") as mock_provider:
+        with patch("account_payable_demo.workflow.OllamaProvider") as mock_provider:
             mock_instance = MagicMock()
             mock_provider.return_value = mock_instance
 
             create_sdk_provider(config, "executor")
 
+            # OllamaProvider handles the /v1 appending internally
             mock_provider.assert_called_once_with(
                 model="qwen2.5:4b-instruct",
-                base_url="http://localhost:11434/v1",
-                api_key="ollama",
+                base_url="http://localhost:11434",
             )
 
     def test_create_deepinfra_provider(self):
