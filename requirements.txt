@@ -2,14 +2,19 @@
 
 # Core dependencies
 python-dotenv>=1.0.0
+playwright>=1.40.0
+openai>=1.0.0
+anthropic>=0.18.0
+
+# Predicate SDK dependencies
+predicate-runtime>=1.3.0
+predicate-authority
+predicate-contracts
 
 # Testing
 pytest>=8.0.0
 pytest-cov>=4.0.0
+pytest-asyncio>=0.23.0
 
-# Type hints (for development)
-# mypy>=1.0.0
-
-# Note: The Predicate Python SDK should be installed separately
-# pip install predicate-sdk (when available)
-# or from local path during development
+# Linting (optional)
+ruff>=0.3.0

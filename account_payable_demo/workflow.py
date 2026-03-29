@@ -38,7 +38,13 @@ from predicate.agents import (
 )
 from predicate.agents.planner_executor_agent import RetryConfig
 from predicate.backends.playwright_backend import PlaywrightBackend
-from predicate.llm_provider import AnthropicProvider, DeepInfraProvider, LLMProvider, OpenAIProvider
+from predicate.llm_provider import (
+    AnthropicProvider,
+    DeepInfraProvider,
+    LLMProvider,
+    OllamaProvider,
+    OpenAIProvider,
+)
 from predicate.models import SnapshotOptions
 from predicate.tracing import JsonlTraceSink, Tracer
 from predicate.verification import Predicate, exists, url_contains
@@ -125,11 +131,10 @@ def create_sdk_provider(config: DemoConfig, role: str) -> LLMProvider:
         model = config.get_executor_model()
 
     if provider_name == "ollama":
-        # Ollama uses OpenAI-compatible API
-        return OpenAIProvider(
+        # Use the new OllamaProvider which wraps OpenAI-compatible API
+        return OllamaProvider(
             model=model,
-            base_url=f"{config.ollama.base_url}/v1",
-            api_key="ollama",  # Ollama doesn't need real API key
+            base_url=config.ollama.base_url,
         )
     elif provider_name == "openai":
         return OpenAIProvider(
