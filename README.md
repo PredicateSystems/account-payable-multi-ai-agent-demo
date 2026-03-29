@@ -380,15 +380,6 @@ This prints detailed provider configuration including:
 
 The demo ships with a pre-created policy in `policy.yaml`. In local mode, `run-demo.sh` can attempt to download the correct sidecar binary for the host platform and run it against this policy.
 
-## Next Implementation Steps
-
-1. ~~Build the finance routes in `local-llama-land`~~ (Done)
-2. ~~Replace the placeholder Python entrypoint with config/provider scaffold~~ (Done)
-3. Implement the PlannerExecutorAgent workflow
-4. Wire `predicate-secure` sidecar integration
-5. Add `predicate-runtime` verification
-6. Record the 2-3 minute GTM demo
-
 ## Related Documentation
 
 - [DESIGN.md](DESIGN.md) - System design and deployment matrix
