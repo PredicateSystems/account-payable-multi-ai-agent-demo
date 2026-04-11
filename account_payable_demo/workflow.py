@@ -179,7 +179,11 @@ class FinanceHeuristics:
         goal_lower = goal.lower() if goal else ""
 
         # Invoice selection in queue (also match specific invoice IDs like INV-2024-001)
-        if "invoice" in intent_lower or "exception" in intent_lower or intent_lower.startswith("inv_"):
+        if (
+            "invoice" in intent_lower
+            or "exception" in intent_lower
+            or intent_lower.startswith("inv_")
+        ):
             return self._find_invoice_row(elements, url, intent)
 
         # Add note button/field - check both intent and goal
@@ -191,11 +195,22 @@ class FinanceHeuristics:
             return self._find_reconcile_button(elements)
 
         # Release payment button - check both intent and goal
-        if "release" in intent_lower or "payment" in intent_lower or "release" in goal_lower or "payment" in goal_lower:
+        if (
+            "release" in intent_lower
+            or "payment" in intent_lower
+            or "release" in goal_lower
+            or "payment" in goal_lower
+        ):
             return self._find_release_payment_button(elements)
 
         # Route to review button - check both intent and goal
-        if "review" in intent_lower or "route" in intent_lower or "escalate" in intent_lower or "review" in goal_lower or "route" in goal_lower:
+        if (
+            "review" in intent_lower
+            or "route" in intent_lower
+            or "escalate" in intent_lower
+            or "review" in goal_lower
+            or "route" in goal_lower
+        ):
             return self._find_route_to_review_button(elements)
 
         # Submit/save button
@@ -237,7 +252,9 @@ class FinanceHeuristics:
             "save",
         ]
 
-    def _find_invoice_row(self, elements: list[Any], url: str, intent: str | None = None) -> int | None:
+    def _find_invoice_row(
+        self, elements: list[Any], url: str, intent: str | None = None
+    ) -> int | None:
         """Find first invoice row with exceptions in the queue.
 
         Args:
@@ -249,7 +266,10 @@ class FinanceHeuristics:
         specific_invoice_id = None
         if intent:
             import re
-            match = re.search(r'(INV[_-]?\d{4}[_-]?\d{3})', intent.upper().replace("-", "_").replace(" ", "_"))
+
+            match = re.search(
+                r"(INV[_-]?\d{4}[_-]?\d{3})", intent.upper().replace("-", "_").replace(" ", "_")
+            )
             if match:
                 specific_invoice_id = match.group(1).replace("_", "-").upper()
 
@@ -268,7 +288,9 @@ class FinanceHeuristics:
                 exact_match = 0
                 if specific_invoice_id:
                     text_upper = text.upper()
-                    if specific_invoice_id in text_upper or specific_invoice_id.replace("-", "") in text_upper.replace("-", ""):
+                    if specific_invoice_id in text_upper or specific_invoice_id.replace(
+                        "-", ""
+                    ) in text_upper.replace("-", ""):
                         exact_match = -1  # Highest priority
 
                 # Prefer rows with exceptions
@@ -279,7 +301,9 @@ class FinanceHeuristics:
 
                 # Higher priority for exact matches, then exceptions
                 exception_score = 0 if has_exception else 1
-                candidates.append((exact_match, exception_score, not in_viewport, doc_y, -importance, el.id))
+                candidates.append(
+                    (exact_match, exception_score, not in_viewport, doc_y, -importance, el.id)
+                )
 
         if not candidates:
             return None
@@ -363,7 +387,12 @@ class FinanceHeuristics:
             placeholder = (getattr(el, "placeholder", "") or "").lower()
 
             # Prefer textboxes related to notes
-            if "note" in text or "note" in placeholder or "comment" in text or "comment" in placeholder:
+            if (
+                "note" in text
+                or "note" in placeholder
+                or "comment" in text
+                or "comment" in placeholder
+            ):
                 importance = getattr(el, "importance", 0) or 0
                 doc_y = getattr(el, "doc_y", 1e9)
                 candidates.append((-importance, doc_y, el.id))
