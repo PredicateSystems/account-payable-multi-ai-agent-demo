@@ -23,7 +23,6 @@ from account_payable_demo.workflow import (
     build_predicate_spec,
     create_sdk_provider,
     execute_beat,
-    get_beat_invoice_id,
     get_beat_1_task,
     get_beat_1_verification,
     get_beat_2_task,
@@ -32,6 +31,7 @@ from account_payable_demo.workflow import (
     get_beat_3_verification,
     get_beat_4_task,
     get_beat_4_verification,
+    get_beat_invoice_id,
 )
 
 
