@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from predicate_contracts import AuthorizationReason
 
@@ -327,6 +329,59 @@ class TestAuthorizerLifecycle:
         """Test that missing policy file raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError):
             ActionAuthorizer.from_policy_file("/nonexistent/policy.yaml")
+
+    def test_sidecar_authorization_is_used_when_reachable(self, policy_file):
+        """Use sidecar HTTP authorization when it is available."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "allowed": True,
+            "reason": "allowed",
+            "mandate_id": "m_sidecar_123",
+            "violated_rule": None,
+            "missing_labels": [],
+        }
+
+        mock_client = MagicMock()
+        mock_client.get.return_value.status_code = 200
+        mock_client.post.return_value = mock_response
+
+        with patch("account_payable_demo.authorization.httpx.Client", return_value=mock_client):
+            authorizer = create_demo_authorizer(
+                policy_file=policy_file,
+                sidecar_url="http://localhost:8787",
+            )
+            assert authorizer.authorization_mode_label == "sidecar"
+            result = authorizer.authorize(
+                action=DemoAction.ADD_NOTE,
+                resource="https://www.localllamaland.com/demo/finance/invoices/123/notes",
+                intent="Add note to invoice 123",
+                principal=DemoPrincipal.RESOLUTION,
+            )
+
+        assert result.allowed is True
+        assert result.reason == AuthorizationReason.ALLOWED
+        mock_client.post.assert_called_once()
+
+    def test_sidecar_unreachable_falls_back_to_local_policy(self, policy_file):
+        """Fall back to local policy evaluation when sidecar is unreachable."""
+        mock_client = MagicMock()
+        mock_client.get.side_effect = httpx.ConnectError("connection refused")
+
+        with patch("account_payable_demo.authorization.httpx.Client", return_value=mock_client):
+            authorizer = create_demo_authorizer(
+                policy_file=policy_file,
+                sidecar_url="http://localhost:8787",
+            )
+            assert authorizer.authorization_mode_label == "local fallback"
+            result = authorizer.authorize(
+                action=DemoAction.ADD_NOTE,
+                resource="https://www.localllamaland.com/demo/finance/invoices/123/notes",
+                intent="Add note to invoice 123",
+                principal=DemoPrincipal.RESOLUTION,
+            )
+
+        assert result.allowed is True
+        assert result.reason == AuthorizationReason.ALLOWED
 
     def test_clear_log(self, authorizer):
         """Test clearing the authorization log."""

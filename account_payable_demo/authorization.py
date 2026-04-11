@@ -20,6 +20,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
+import httpx
 from predicate_authority import AuthorityClient, LocalAuthorizationContext
 from predicate_contracts import (
     ActionRequest,
@@ -147,17 +148,29 @@ class ActionAuthorizer:
         self,
         authority_context: LocalAuthorizationContext,
         default_principal: DemoPrincipal = DemoPrincipal.RESOLUTION,
+        sidecar_url: str | None = None,
+        sidecar_timeout_s: float = 2.0,
     ) -> None:
         """Initialize the authorizer.
 
         Args:
             authority_context: The local authorization context
             default_principal: Default principal to use if not specified
+            sidecar_url: Optional sidecar base URL for HTTP authorization
+            sidecar_timeout_s: Sidecar request timeout in seconds
         """
         self._context = authority_context
         self._client = authority_context.client
         self._default_principal = default_principal
         self._authorization_log: list[AuthorizationResult] = []
+        self._sidecar_url = sidecar_url.rstrip("/") if sidecar_url else None
+        self._sidecar_timeout_s = sidecar_timeout_s
+        self._authorization_mode_label = self._detect_authorization_mode()
+
+    @property
+    def authorization_mode_label(self) -> str:
+        """Return the active authorization mode for logging/UI."""
+        return self._authorization_mode_label
 
     @classmethod
     def from_policy_file(
@@ -166,6 +179,8 @@ class ActionAuthorizer:
         signing_key: str = DEMO_SIGNING_KEY,
         ttl_seconds: int = 300,
         default_principal: DemoPrincipal = DemoPrincipal.RESOLUTION,
+        sidecar_url: str | None = None,
+        sidecar_timeout_s: float = 2.0,
     ) -> ActionAuthorizer:
         """Create an authorizer from a policy file.
 
@@ -174,6 +189,8 @@ class ActionAuthorizer:
             signing_key: Secret key for mandate signing
             ttl_seconds: Time-to-live for mandates
             default_principal: Default principal to use
+            sidecar_url: Optional sidecar base URL for HTTP authorization
+            sidecar_timeout_s: Sidecar request timeout in seconds
 
         Returns:
             ActionAuthorizer instance
@@ -190,6 +207,8 @@ class ActionAuthorizer:
         return cls(
             authority_context=context,
             default_principal=default_principal,
+            sidecar_url=sidecar_url,
+            sidecar_timeout_s=sidecar_timeout_s,
         )
 
     def authorize(
@@ -255,8 +274,8 @@ class ActionAuthorizer:
             verification_evidence=VerificationEvidence(signals=signals),
         )
 
-        # Get authorization decision
-        decision = self._client.authorize(request)
+        # Get authorization decision, preferring the sidecar when configured.
+        decision = self._authorize_request(request)
 
         # Build result
         result = AuthorizationResult(
@@ -274,6 +293,90 @@ class ActionAuthorizer:
         self._log_authorization(result)
 
         return result
+
+    def _authorize_request(self, request: ActionRequest) -> AuthorizationDecision:
+        """Authorize via sidecar if configured, else use local policy evaluation."""
+        if self._sidecar_url:
+            try:
+                decision = self._authorize_via_sidecar(request)
+                self._authorization_mode_label = "sidecar"
+                return decision
+            except httpx.HTTPError as exc:
+                logger.warning(
+                    "Sidecar unreachable at %s; falling back to local policy evaluation: %s",
+                    self._sidecar_url,
+                    exc,
+                )
+                self._authorization_mode_label = "local fallback"
+
+        return self._client.authorize(request)
+
+    def _authorize_via_sidecar(self, request: ActionRequest) -> AuthorizationDecision:
+        """Call the sidecar /v1/authorize endpoint using the simplified wire format."""
+        payload = {
+            "principal": request.principal.principal_id,
+            "action": request.action_spec.action,
+            "resource": request.action_spec.resource,
+            "intent_hash": request.state_evidence.state_hash,
+            "labels": [
+                signal.label
+                for signal in request.verification_evidence.signals
+                if signal.status == VerificationStatus.PASSED
+            ],
+        }
+
+        client = httpx.Client(timeout=self._sidecar_timeout_s)
+        try:
+            response = client.post(f"{self._sidecar_url}/v1/authorize", json=payload)
+        finally:
+            client.close()
+
+        if response.status_code not in (200, 403):
+            response.raise_for_status()
+
+        body = response.json()
+        allowed = bool(body.get("allowed", False))
+        reason = self._parse_sidecar_reason(body.get("reason", ""), allowed)
+
+        return AuthorizationDecision(
+            allowed=allowed,
+            reason=reason,
+            mandate=None,
+            violated_rule=body.get("violated_rule"),
+            missing_labels=tuple(body.get("missing_labels", [])),
+        )
+
+    def _detect_authorization_mode(self) -> str:
+        """Determine whether startup should prefer sidecar or local fallback."""
+        if not self._sidecar_url:
+            return "local fallback"
+
+        client = httpx.Client(timeout=self._sidecar_timeout_s)
+        try:
+            response = client.get(f"{self._sidecar_url}/health")
+            if response.status_code == 200:
+                return "sidecar"
+        except httpx.HTTPError:
+            pass
+        finally:
+            client.close()
+
+        return "local fallback"
+
+    @staticmethod
+    def _parse_sidecar_reason(raw_reason: str, allowed: bool) -> AuthorizationReason:
+        """Map sidecar reason strings to predicate-contracts AuthorizationReason."""
+        normalized = (raw_reason or "").strip().lower()
+        if normalized.startswith(AuthorizationReason.ALLOWED.value):
+            return AuthorizationReason.ALLOWED
+        if normalized.startswith(AuthorizationReason.EXPLICIT_DENY.value):
+            return AuthorizationReason.EXPLICIT_DENY
+        if normalized.startswith(AuthorizationReason.NO_MATCHING_POLICY.value):
+            return AuthorizationReason.NO_MATCHING_POLICY
+        if normalized.startswith("missing_labels"):
+            return AuthorizationReason.MISSING_REQUIRED_VERIFICATION
+
+        return AuthorizationReason.ALLOWED if allowed else AuthorizationReason.NO_MATCHING_POLICY
 
     def authorize_beat_action(
         self,
@@ -318,7 +421,11 @@ class ActionAuthorizer:
 
         principal_str = principal.value if isinstance(principal, DemoPrincipal) else principal
         logger.info(
-            f"[{beat_name}] Authorizing action: {action.value} as {principal_str} on {resource}"
+            "[%s] Authorizing action: %s as %s on %s",
+            beat_name,
+            action.value,
+            principal_str,
+            resource,
         )
 
         return self.authorize(
@@ -347,21 +454,26 @@ class ActionAuthorizer:
     def _log_authorization(self, result: AuthorizationResult) -> None:
         """Log an authorization decision."""
         if result.allowed:
-            logger.info(f"AUTHORIZED: {result.action} on {result.resource}")
+            logger.info("AUTHORIZED: %s on %s", result.action, result.resource)
         else:
             logger.warning(
-                f"DENIED: {result.action} on {result.resource} "
-                f"(reason: {result.reason.value}, rule: {result.violated_rule})"
+                "DENIED: %s on %s (reason: %s, rule: %s)",
+                result.action,
+                result.resource,
+                result.reason.value,
+                result.violated_rule,
             )
 
 
 def create_demo_authorizer(
     policy_file: str | Path | None = None,
+    sidecar_url: str | None = None,
 ) -> ActionAuthorizer:
     """Create an authorizer for the demo.
 
     Args:
         policy_file: Path to policy file (defaults to policy.yaml in demo root)
+        sidecar_url: Optional sidecar base URL for HTTP authorization first
 
     Returns:
         ActionAuthorizer instance
@@ -371,7 +483,7 @@ def create_demo_authorizer(
         demo_root = Path(__file__).parent.parent
         policy_file = demo_root / "policy.yaml"
 
-    return ActionAuthorizer.from_policy_file(policy_file)
+    return ActionAuthorizer.from_policy_file(policy_file, sidecar_url=sidecar_url)
 
 
 def format_denial_message(result: AuthorizationResult) -> str:

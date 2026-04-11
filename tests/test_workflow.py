@@ -9,7 +9,7 @@ These tests follow the 'soft plans, hard predicates' design:
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from predicate.agents import AutomationTask, TaskCategory
@@ -22,6 +22,8 @@ from account_payable_demo.workflow import (
     build_demo_plan_step,
     build_predicate_spec,
     create_sdk_provider,
+    execute_beat,
+    get_beat_invoice_id,
     get_beat_1_task,
     get_beat_1_verification,
     get_beat_2_task,
@@ -149,7 +151,7 @@ class TestBeatTaskDefinitions:
         """Test Beat 1 task defines objective, not steps."""
         task = get_beat_1_task()
         assert task.task_id == "beat-1-open-and-note"
-        assert "localllamaland.com/demo/finance/queue" in task.starting_url
+        assert task.starting_url.endswith("/demo/finance/invoices/INV-2024-005")
         assert task.category == TaskCategory.FORM_FILL
         # Task describes objective
         assert "invoice" in task.task.lower()
@@ -161,6 +163,7 @@ class TestBeatTaskDefinitions:
         """Test Beat 2 task defines mark reconciled objective."""
         task = get_beat_2_task()
         assert task.task_id == "beat-2-mark-reconciled"
+        assert task.starting_url.endswith("/demo/finance/invoices/INV-2024-002")
         # Task describes the action
         assert "mark reconciled" in task.task.lower()
         assert "status" in task.task.lower()
@@ -181,18 +184,16 @@ class TestBeatTaskDefinitions:
         """Test Beat 4 task defines route to review objective."""
         task = get_beat_4_task()
         assert task.task_id == "beat-4-route-to-review"
+        assert task.starting_url.endswith("/demo/finance/invoices/INV-2024-001")
         # Task describes safe fallback
         assert "review" in task.task.lower()
         # Goal captures intent
         assert task.goal.get("action") == "route_to_review"
 
-    def test_all_tasks_target_same_url(self):
-        """Test all tasks start from the finance queue."""
+    def test_default_tasks_start_from_finance_queue(self):
+        """Beats that do not need a fixed invoice start from the finance queue."""
         tasks = [
-            get_beat_1_task(),
-            get_beat_2_task(),
             get_beat_3_task(),
-            get_beat_4_task(),
         ]
         for task in tasks:
             assert "localllamaland.com/demo/finance/queue" in task.starting_url
@@ -495,6 +496,22 @@ class TestDemoStoryAlignment:
         # (will FAIL in demo, proving silent failure detection)
         assert len(verification) >= 1
 
+
+class TestBeatInvoiceSelection:
+    """Tests that each beat targets the intended deterministic invoice."""
+
+    def test_beat_1_targets_mismatch_invoice_for_note_workflow(self):
+        """Beat 1 should target the deterministic exception invoice for note-taking."""
+        assert get_beat_invoice_id(DemoBeat.OPEN_AND_NOTE) == "INV-2024-005"
+
+    def test_beat_2_targets_mismatch_invoice(self):
+        """Beat 2 must target the mismatch invoice so reconciliation silently fails."""
+        assert get_beat_invoice_id(DemoBeat.MARK_RECONCILED) == "INV-2024-002"
+
+    def test_beat_4_targets_policy_demo_invoice(self):
+        """Beat 4 should target the same deterministic invoice used for the fallback flow."""
+        assert get_beat_invoice_id(DemoBeat.ROUTE_TO_REVIEW) == "INV-2024-001"
+
     def test_beat_3_is_high_risk_transaction(self):
         """Beat 3 should be a high-risk action that gets blocked."""
         task = get_beat_3_task()
@@ -514,3 +531,52 @@ class TestDemoStoryAlignment:
 
         # Routes to review instead of direct action
         assert "review" in task.task.lower()
+
+
+class TestBeatExecution:
+    """Tests for beat execution lifecycle."""
+
+    @pytest.mark.asyncio
+    async def test_execute_beat_navigates_to_task_starting_url_before_run(self):
+        """Each beat should navigate to its declared start URL before stepwise execution."""
+        task = AutomationTask(
+            task_id="beat-test",
+            starting_url="https://www.localllamaland.com/demo/finance/invoices/INV-2024-002",
+            task="Route the invoice to review",
+            goal={"action": "route_to_review"},
+            category=TaskCategory.FORM_FILL,
+            max_steps=1,
+        )
+        call_order: list[tuple[str, str]] = []
+
+        runtime = MagicMock()
+
+        async def goto(url: str) -> None:
+            call_order.append(("goto", url))
+
+        runtime.goto = AsyncMock(side_effect=goto)
+        setattr(runtime, "assert_", MagicMock(return_value=True))
+
+        outcome = MagicMock()
+        agent = MagicMock()
+
+        async def run_stepwise(runtime_arg, task_arg):
+            call_order.append(("run_stepwise", task_arg.starting_url))
+            return outcome
+
+        agent.run_stepwise = AsyncMock(side_effect=run_stepwise)
+
+        result = await execute_beat(
+            agent=agent,
+            runtime=runtime,
+            beat=DemoBeat.ROUTE_TO_REVIEW,
+            task=task,
+            verification=[],
+            authorizer=None,
+        )
+
+        assert result.success is True
+        assert call_order == [
+            ("goto", task.starting_url),
+            ("run_stepwise", task.starting_url),
+        ]
