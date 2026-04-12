@@ -101,6 +101,7 @@ def mock_runtime():
     # Mock assert_() method for predicate evaluation
     # Default behavior: all predicates pass (True)
     runtime.assert_ = MagicMock(return_value=True)
+    runtime.goto = AsyncMock(return_value=None)
 
     return runtime
 
