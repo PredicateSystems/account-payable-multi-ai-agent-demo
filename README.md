@@ -21,6 +21,12 @@ This demo shows how Predicate Systems enables safe, verifiable agent workflows i
 - Total tokens: 12,884
 - All beats succeeded as expected: ✅
 
+### Predicate Authority Web UI
+
+The demo can authorize through the running sidecar, and the web UI shows the live allow/deny decisions for each beat:
+
+![Predicate Authority Web UI showing demo authorization events](web-ui.png)
+
 ### Why Local LLM Matters for Finance
 
 Financial operations involve sensitive data—invoice amounts, vendor details, payment authorizations. This demo runs entirely on **local LLMs** with zero data leaving your infrastructure:

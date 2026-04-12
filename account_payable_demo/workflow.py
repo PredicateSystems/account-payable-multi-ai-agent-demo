@@ -176,30 +176,65 @@ class FinanceHeuristics:
     ) -> int | None:
         """Find element ID using domain-specific heuristics."""
         intent_lower = intent.lower().replace("-", "_").replace(" ", "_")
+        goal_lower = goal.lower() if goal else ""
 
-        # Invoice selection in queue
-        if "invoice" in intent_lower or "exception" in intent_lower:
-            return self._find_invoice_row(elements, url)
+        # Invoice selection in queue (also match specific invoice IDs like INV-2024-001)
+        if (
+            "invoice" in intent_lower
+            or "exception" in intent_lower
+            or intent_lower.startswith("inv_")
+        ):
+            return self._find_invoice_row(elements, url, intent)
 
-        # Add note button/field
-        if "note" in intent_lower or "add_note" in intent_lower:
+        # Add note button/field - check both intent and goal
+        if "note" in intent_lower or "add_note" in intent_lower or "note" in goal_lower:
             return self._find_add_note_element(elements)
 
-        # Mark reconciled button
-        if "reconcil" in intent_lower:
+        # Mark reconciled button - check both intent and goal
+        if "reconcil" in intent_lower or "reconcil" in goal_lower:
             return self._find_reconcile_button(elements)
 
-        # Release payment button
-        if "release" in intent_lower or "payment" in intent_lower:
+        # Release payment button - check both intent and goal
+        if (
+            "release" in intent_lower
+            or "payment" in intent_lower
+            or "release" in goal_lower
+            or "payment" in goal_lower
+        ):
             return self._find_release_payment_button(elements)
 
-        # Route to review button
-        if "review" in intent_lower or "route" in intent_lower or "escalate" in intent_lower:
+        # Route to review button - check both intent and goal
+        if (
+            "review" in intent_lower
+            or "route" in intent_lower
+            or "escalate" in intent_lower
+            or "review" in goal_lower
+            or "route" in goal_lower
+        ):
             return self._find_route_to_review_button(elements)
 
         # Submit/save button
         if "submit" in intent_lower or "save" in intent_lower:
             return self._find_submit_button(elements)
+
+        # Textbox/textarea for TYPE_AND_SUBMIT - check goal for context
+        if intent_lower in {"textbox", "textarea", "input", "field", "text_field", "input_field"}:
+            # Use goal to determine what kind of textbox
+            if "note" in goal_lower or "comment" in goal_lower:
+                return self._find_note_textbox(elements)
+            # Generic textbox - find first visible one
+            return self._find_first_textbox(elements)
+
+        # Fallback: if intent is generic ("button", "link") but goal contains specific action keywords
+        if intent_lower in {"button", "link", "element"}:
+            if "note" in goal_lower:
+                return self._find_add_note_element(elements)
+            if "reconcil" in goal_lower:
+                return self._find_reconcile_button(elements)
+            if "release" in goal_lower or "payment" in goal_lower:
+                return self._find_release_payment_button(elements)
+            if "review" in goal_lower or "route" in goal_lower:
+                return self._find_route_to_review_button(elements)
 
         return None
 
@@ -217,8 +252,27 @@ class FinanceHeuristics:
             "save",
         ]
 
-    def _find_invoice_row(self, elements: list[Any], url: str) -> int | None:
-        """Find first invoice row with exceptions in the queue."""
+    def _find_invoice_row(
+        self, elements: list[Any], url: str, intent: str | None = None
+    ) -> int | None:
+        """Find first invoice row with exceptions in the queue.
+
+        Args:
+            elements: List of snapshot elements
+            url: Current page URL
+            intent: Intent hint (may contain specific invoice ID like "INV-2024-001")
+        """
+        # Extract specific invoice ID from intent if provided (e.g., "INV-2024-001")
+        specific_invoice_id = None
+        if intent:
+            import re
+
+            match = re.search(
+                r"(INV[_-]?\d{4}[_-]?\d{3})", intent.upper().replace("-", "_").replace(" ", "_")
+            )
+            if match:
+                specific_invoice_id = match.group(1).replace("_", "-").upper()
+
         candidates = []
         for el in elements:
             role = (getattr(el, "role", "") or "").lower()
@@ -230,20 +284,31 @@ class FinanceHeuristics:
 
             # Look for invoice links or rows with exception indicators
             if "inv" in text or "invoice" in text or "/invoices/" in href:
+                # Check for specific invoice ID match (highest priority)
+                exact_match = 0
+                if specific_invoice_id:
+                    text_upper = text.upper()
+                    if specific_invoice_id in text_upper or specific_invoice_id.replace(
+                        "-", ""
+                    ) in text_upper.replace("-", ""):
+                        exact_match = -1  # Highest priority
+
                 # Prefer rows with exceptions
                 has_exception = "exception" in text or "discrepancy" in text or "mismatch" in text
                 in_viewport = bool(getattr(el, "in_viewport", True))
                 doc_y = getattr(el, "doc_y", None) or 1e9
                 importance = getattr(el, "importance", 0) or 0
 
-                # Higher priority for exceptions
+                # Higher priority for exact matches, then exceptions
                 exception_score = 0 if has_exception else 1
-                candidates.append((exception_score, not in_viewport, doc_y, -importance, el.id))
+                candidates.append(
+                    (exact_match, exception_score, not in_viewport, doc_y, -importance, el.id)
+                )
 
         if not candidates:
             return None
         candidates.sort()
-        return candidates[0][4]
+        return candidates[0][5]
 
     def _find_add_note_element(self, elements: list[Any]) -> int | None:
         """Find add note button or textarea."""
@@ -310,6 +375,49 @@ class FinanceHeuristics:
             if "submit" in text or "save" in text or "confirm" in text:
                 return el.id
         return None
+
+    def _find_note_textbox(self, elements: list[Any]) -> int | None:
+        """Find textbox/textarea for adding notes."""
+        candidates = []
+        for el in elements:
+            role = (getattr(el, "role", "") or "").lower()
+            if role not in {"textbox", "textarea", "input"}:
+                continue
+            text = (getattr(el, "text", "") or "").lower()
+            placeholder = (getattr(el, "placeholder", "") or "").lower()
+
+            # Prefer textboxes related to notes
+            if (
+                "note" in text
+                or "note" in placeholder
+                or "comment" in text
+                or "comment" in placeholder
+            ):
+                importance = getattr(el, "importance", 0) or 0
+                doc_y = getattr(el, "doc_y", 1e9)
+                candidates.append((-importance, doc_y, el.id))
+
+        if not candidates:
+            # No note-specific textbox, try to find any visible textbox
+            return self._find_first_textbox(elements)
+        candidates.sort()
+        return candidates[0][2]
+
+    def _find_first_textbox(self, elements: list[Any]) -> int | None:
+        """Find first visible textbox/textarea."""
+        candidates = []
+        for el in elements:
+            role = (getattr(el, "role", "") or "").lower()
+            if role not in {"textbox", "textarea", "input"}:
+                continue
+            importance = getattr(el, "importance", 0) or 0
+            doc_y = getattr(el, "doc_y", 1e9)
+            candidates.append((-importance, doc_y, el.id))
+
+        if not candidates:
+            return None
+        candidates.sort()
+        return candidates[0][2]
 
 
 # ---------------------------------------------------------------------------
@@ -385,13 +493,13 @@ def get_beat_1_task() -> AutomationTask:
 
     Task objective given to the planner. The planner decides HOW to accomplish it.
     """
+    invoice_id = get_beat_invoice_id(DemoBeat.OPEN_AND_NOTE)
     return AutomationTask(
         task_id="beat-1-open-and-note",
-        starting_url="https://www.localllamaland.com/demo/finance/queue",
+        starting_url=f"https://www.localllamaland.com/demo/finance/invoices/{invoice_id}",
         task=(
-            "Navigate to the finance queue, select the first invoice with exceptions, "
-            "open its detail view, compare the invoice amount with the PO amount, "
-            "and add a note explaining any discrepancy found."
+            f"Open invoice {invoice_id} in the finance app, compare the invoice amount "
+            "with the PO amount, and add a note explaining any discrepancy found."
         ),
         goal={"action": "add_note", "verify": "note_visible"},
         category=TaskCategory.FORM_FILL,
@@ -406,12 +514,13 @@ def get_beat_2_task() -> AutomationTask:
     The UI will show the button click happening, but the status won't change.
     This demonstrates silent failure detection.
     """
+    invoice_id = get_beat_invoice_id(DemoBeat.MARK_RECONCILED)
     return AutomationTask(
         task_id="beat-2-mark-reconciled",
-        starting_url="https://www.localllamaland.com/demo/finance/queue",
+        starting_url=f"https://www.localllamaland.com/demo/finance/invoices/{invoice_id}",
         task=(
-            "Navigate to the invoice detail view and click the 'Mark Reconciled' button "
-            "to mark this invoice as reconciled. Verify the status indicator updates."
+            f"Open invoice {invoice_id} in the finance app and click the 'Mark Reconciled' "
+            "button to mark this invoice as reconciled. Verify the status indicator updates."
         ),
         goal={"action": "mark_reconciled", "verify": "status_changed"},
         category=TaskCategory.FORM_FILL,
@@ -445,11 +554,12 @@ def get_beat_4_task() -> AutomationTask:
     After the risky action is blocked, fall back to the safe action of routing
     the invoice to a manager for review.
     """
+    invoice_id = get_beat_invoice_id(DemoBeat.ROUTE_TO_REVIEW)
     return AutomationTask(
         task_id="beat-4-route-to-review",
-        starting_url="https://www.localllamaland.com/demo/finance/queue",
+        starting_url=f"https://www.localllamaland.com/demo/finance/invoices/{invoice_id}",
         task=(
-            "Navigate to the invoice detail view and route this invoice to manager review "
+            f"Open invoice {invoice_id} in the finance app and route it to manager review "
             "by clicking 'Route to Review', 'Request Review', or 'Escalate' button."
         ),
         goal={"action": "route_to_review", "verify": "review_requested"},
@@ -472,6 +582,17 @@ def get_beat_action(beat: DemoBeat) -> DemoAction:
         DemoBeat.ROUTE_TO_REVIEW: DemoAction.ROUTE_TO_REVIEW,
     }
     return action_map[beat]
+
+
+def get_beat_invoice_id(beat: DemoBeat) -> str:
+    """Return the deterministic invoice ID for a demo beat."""
+    invoice_map = {
+        DemoBeat.OPEN_AND_NOTE: "INV-2024-005",
+        DemoBeat.MARK_RECONCILED: "INV-2024-002",
+        DemoBeat.RELEASE_PAYMENT: "INV-2024-001",
+        DemoBeat.ROUTE_TO_REVIEW: "INV-2024-001",
+    }
+    return invoice_map[beat]
 
 
 async def execute_beat(
@@ -505,9 +626,11 @@ async def execute_beat(
     auth_result: Optional[AuthorizationResult] = None
     if authorizer is not None:
         action = get_beat_action(beat)
+        invoice_id = get_beat_invoice_id(beat)
         auth_result = authorizer.authorize_beat_action(
             beat_name=beat.value,
             action=action,
+            invoice_id=invoice_id,
             principal=beat_principal,
         )
 
@@ -551,6 +674,10 @@ async def execute_beat(
                 )
 
     try:
+        # Reset the browser to the task's declared starting page so each beat
+        # runs against the intended invoice/context instead of leaking state.
+        await runtime.goto(task.starting_url)
+
         # Execute the task using stepwise (ReAct-style) planning
         # Plans one step at a time based on current page state
         # SDK now includes stabilization before each planning snapshot
@@ -646,8 +773,9 @@ async def run_demo_workflow(
     authorizer: Optional[ActionAuthorizer] = None
     if enable_authorization:
         try:
-            authorizer = create_demo_authorizer(policy_file)
+            authorizer = create_demo_authorizer(policy_file, sidecar_url=config.sidecar.url)
             logger.info("Authorization enabled with policy file")
+            logger.info("Authorization mode: %s", authorizer.authorization_mode_label)
         except FileNotFoundError as e:
             logger.warning(f"Policy file not found, running without authorization: {e}")
         except Exception as e:
