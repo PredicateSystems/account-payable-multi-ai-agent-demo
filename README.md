@@ -203,8 +203,8 @@ ollama pull qwen3:4b
 # 3. Start sidecar (in separate terminal)
 ./predicate-authorityd --policy-file ./policy.yaml --web-ui run
 
-# 4. Run demo
-python main.py --run-workflow
+# 4. Run demo in local (not docker) with local LLM models
+python main.py --mode local --llm local --run-workflow
 ```
 
 ### Cloud LLM
@@ -218,8 +218,8 @@ Easiest setup, best quality. Requires API key.
 # 2. Start sidecar (in separate terminal)
 ./predicate-authorityd --policy-file ./policy.yaml --web-ui run
 
-# 3. Run demo
-python main.py --run-workflow
+# 3. Run demo with cloud LLM in local (not docker)
+python main.py --mode local --llm cloud --run-workflow
 ```
 
 ### Docker + Cloud
